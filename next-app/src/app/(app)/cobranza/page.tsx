@@ -133,25 +133,29 @@ export default function CobranzaPage() {
         const pMat = Number(pac?.precio_sesion_matutina) || precioMatLocal;
         let totalEsperado: number | null = null;
         if (cal) {
-          let monto = 0;
-          const { celdas } = generarCalendario(anio, mes, cal.horario || {}, cal.excepciones || "");
-          celdas.flat().forEach((c) => {
-            if (c.tipo !== "sesion" || c.diaSemana === undefined) return;
-            const tipo = cal.tipo_sesion?.[DIAS_KEY[c.diaSemana]] || "Regular";
-            monto += tipo === "Matutina" ? pMat : pReg;
-          });
-          (cal.reposiciones || []).filter((r) => r.dia && r.hora).forEach((r) => {
-            monto += r.tipoRep === "Matutina" ? pMat : pReg;
-          });
-          const recargoPago = pagos[0]?.recargo ? monto * 0.1 : 0;
-          monto += recargoPago;
-          totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
+          // Confiar en cal.sesiones_matutinas / cal.sesiones_regulares /
+          // reposiciones_count guardados (computados al guardar el calendario,
+          // respetando asuetos). Si todos están en 0, el calendario no tiene
+          // info real — no generar saldo a favor (skip).
+          const sM = Number(cal.sesiones_matutinas) || 0;
+          const sR = Number(cal.sesiones_regulares) || 0;
+          const rC = Number(cal.reposiciones_count) || 0;
+          const totalSes = sM + sR + rC;
+          if (totalSes > 0) {
+            // Recalcular monto LIVE con precio per-paciente
+            let monto = sM * pMat + sR * pReg + rC * pReg;
+            const recargoPago = pagos[0]?.recargo ? monto * 0.1 : 0;
+            monto += recargoPago;
+            totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
+          }
         } else if (pagos[0]?.sesiones_manual != null) {
           const ses = Number(pagos[0].sesiones_manual);
-          const monto = ses * pReg;
-          totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
+          if (ses > 0) {
+            const monto = ses * pReg;
+            totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
+          }
         }
-        if (totalEsperado !== null) {
+        if (totalEsperado !== null && totalEsperado > 0) {
           const pagadoReal = conIva ? Math.round(montoPagadoTotal * (1 + ivaRateLocal)) : montoPagadoTotal;
           const dif = pagadoReal - totalEsperado;
           // Tolerancia $50 para evitar ruido por redondeo de IVA / décimas
