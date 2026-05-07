@@ -197,7 +197,7 @@ export default function HorariosTerapeutasPage() {
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-stone-800">Horarios Terapeutas</h1>
-          <p className="text-sm text-stone-400 mt-0.5">Selecciona actividad por slot. Si es "Sesion Terapia", elige el paciente.</p>
+          <p className="text-sm text-stone-400 mt-0.5">Selecciona actividad por slot. Si es &quot;Sesion Terapia&quot;, elige el paciente.</p>
         </div>
         <div className="flex items-center gap-2">
           <label className="text-xs font-medium text-stone-500">Semana del lunes:</label>
@@ -255,7 +255,7 @@ export default function HorariosTerapeutasPage() {
 
       {terapeutas.length === 0 && (
         <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-8 text-center text-stone-400 text-sm">
-          No hay empleados activos con puesto "Terapeuta".
+          No hay empleados activos con puesto &quot;Terapeuta&quot;.
         </div>
       )}
 

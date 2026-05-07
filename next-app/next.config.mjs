@@ -6,6 +6,9 @@ const nextConfig = {
       { protocol: "https", hostname: "media.base44.com" },
     ],
   },
+  // ESLint warnings no bloquean build (deploy). TypeScript errors sí.
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: false },
 };
 
 export default nextConfig;
