@@ -118,15 +118,21 @@ export default function CobranzaPage() {
 
       const ivaRateLocal = Number(params.iva ?? 0.16);
       const precioRegularLocal = Number(params.precio_terapia_regular ?? 1100);
+      const precioMatLocal = Number(params.precio_terapia_matutina ?? 900);
+      const pacMapAnt = Object.fromEntries(allPacientes.map((p) => [p.id, p]));
       Object.values(porPacMes).forEach(({ paciente_id, anio, mes, pagos }) => {
         const montoPagadoTotal = pagos.reduce((s, p) => s + Number(p.monto_pagado || 0), 0);
         const forma = pagos[0]?.forma_pago || "Efectivo";
         const conIva = CON_IVA_FORMAS.includes(forma);
         const cal = allCals.find((c) => c.paciente_id === paciente_id && c.anio === anio && c.mes === mes);
+        // Usar precio del paciente si está definido, si no global. Misma lógica
+        // que el cálculo principal (calcularSesionesDesdeCal) — sino los pacientes
+        // con precio distinto al global generan saldos a favor falsos.
+        const pac = pacMapAnt[paciente_id];
+        const pReg = Number(pac?.precio_sesion_regular) || precioRegularLocal;
+        const pMat = Number(pac?.precio_sesion_matutina) || precioMatLocal;
         let totalEsperado: number | null = null;
         if (cal) {
-          const pReg = Number(params.precio_terapia_regular ?? 1100);
-          const pMat = Number(params.precio_terapia_matutina ?? 900);
           let monto = 0;
           const { celdas } = generarCalendario(anio, mes, cal.horario || {}, cal.excepciones || "");
           celdas.flat().forEach((c) => {
@@ -142,13 +148,14 @@ export default function CobranzaPage() {
           totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
         } else if (pagos[0]?.sesiones_manual != null) {
           const ses = Number(pagos[0].sesiones_manual);
-          const monto = ses * precioRegularLocal;
+          const monto = ses * pReg;
           totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
         }
         if (totalEsperado !== null) {
           const pagadoReal = conIva ? Math.round(montoPagadoTotal * (1 + ivaRateLocal)) : montoPagadoTotal;
           const dif = pagadoReal - totalEsperado;
-          if (dif > 0) saldos[paciente_id] = (saldos[paciente_id] || 0) + dif;
+          // Tolerancia $50 para evitar ruido por redondeo de IVA / décimas
+          if (dif > 50) saldos[paciente_id] = (saldos[paciente_id] || 0) + dif;
         }
       });
       setSaldosAFavor(saldos);
