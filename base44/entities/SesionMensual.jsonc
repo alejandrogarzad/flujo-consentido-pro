@@ -1,0 +1,62 @@
+{
+  "name": "SesionMensual",
+  "type": "object",
+  "properties": {
+    "paciente_id": {
+      "type": "string",
+      "description": "ID del paciente"
+    },
+    "paciente_nombre": {
+      "type": "string"
+    },
+    "anio": {
+      "type": "number"
+    },
+    "mes": {
+      "type": "number",
+      "description": "1-12"
+    },
+    "sesiones_matutinas": {
+      "type": "number",
+      "default": 0
+    },
+    "sesiones_regulares": {
+      "type": "number",
+      "default": 0
+    },
+    "beca_porcentaje": {
+      "type": "number",
+      "default": 0,
+      "description": "0-100"
+    },
+    "forma_pago_mes": {
+      "type": "string",
+      "enum": [
+        "Efectivo",
+        "Transferencia",
+        "Tarjeta",
+        "Dep\u00f3sito"
+      ],
+      "default": "Efectivo"
+    },
+    "excepciones_dias": {
+      "type": "string",
+      "description": "D\u00edas sin sesi\u00f3n separados por coma, ej: 1,3,17"
+    },
+    "monto_override": {
+      "type": "number",
+      "description": "Override manual del monto efectivo del mes; si est\u00e1 definido sustituye el subtotal calculado por sesiones x precio"
+    },
+    "notas": {
+      "type": "string"
+    },
+    "capturado_por": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "paciente_id",
+    "anio",
+    "mes"
+  ]
+}

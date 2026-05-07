@@ -1,0 +1,60 @@
+{
+  "name": "Gasto",
+  "type": "object",
+  "properties": {
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "categoria": {
+      "type": "string",
+      "enum": [
+        "Renta",
+        "Materiales Centro",
+        "Materiales Limpieza",
+        "Comidas",
+        "Servicios",
+        "Renta Terapeutas",
+        "Capacitaciones",
+        "N\u00f3mina",
+        "Impuestos",
+        "Otros"
+      ]
+    },
+    "concepto": {
+      "type": "string"
+    },
+    "monto": {
+      "type": "number"
+    },
+    "con_factura": {
+      "type": "boolean",
+      "default": false
+    },
+    "forma_pago": {
+      "type": "string",
+      "enum": [
+        "Efectivo",
+        "Transferencia",
+        "Tarjeta",
+        "Dep\u00f3sito"
+      ],
+      "default": "Efectivo"
+    },
+    "proveedor": {
+      "type": "string"
+    },
+    "notas": {
+      "type": "string"
+    },
+    "capturado_por": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "fecha",
+    "categoria",
+    "concepto",
+    "monto"
+  ]
+}

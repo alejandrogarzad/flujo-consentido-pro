@@ -1,0 +1,41 @@
+{
+  "name": "Empleado",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string"
+    },
+    "iniciales": {
+      "type": "string"
+    },
+    "puesto": {
+      "type": "string"
+    },
+    "sueldo_transferencia_mes": {
+      "type": "number",
+      "default": 0
+    },
+    "sueldo_efectivo_mes": {
+      "type": "number",
+      "default": 0
+    },
+    "fecha_ingreso": {
+      "type": "string",
+      "format": "date"
+    },
+    "estatus": {
+      "type": "string",
+      "enum": [
+        "Activo",
+        "Inactivo"
+      ],
+      "default": "Activo"
+    },
+    "notas": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}

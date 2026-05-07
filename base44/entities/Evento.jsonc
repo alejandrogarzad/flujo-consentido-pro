@@ -1,0 +1,57 @@
+{
+  "name": "Evento",
+  "type": "object",
+  "properties": {
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "Cita inicial / ingreso",
+        "Cita seguimiento directora",
+        "Cita escolar virtual",
+        "Cita escolar presencial",
+        "Observaci\u00f3n escolar",
+        "Reporte adicional",
+        "Evaluaci\u00f3n"
+      ]
+    },
+    "nombre_paciente": {
+      "type": "string"
+    },
+    "forma_pago": {
+      "type": "string",
+      "enum": [
+        "Efectivo",
+        "Transferencia",
+        "Tarjeta",
+        "Dep\u00f3sito"
+      ],
+      "default": "Efectivo"
+    },
+    "precio_base": {
+      "type": "number"
+    },
+    "fecha_pago": {
+      "type": "string",
+      "format": "date"
+    },
+    "monto_pagado": {
+      "type": "number",
+      "default": 0
+    },
+    "notas": {
+      "type": "string"
+    },
+    "capturado_por": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "fecha",
+    "tipo",
+    "nombre_paciente"
+  ]
+}

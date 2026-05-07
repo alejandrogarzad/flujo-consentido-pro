@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(curl -sI http://localhost:3001/login)",
+      "Bash(curl -sI http://localhost:3001/parametros)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__browser_batch",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__computer",
+      "Bash(/usr/bin/curl -sI http://localhost:3001/subarrendamiento)",
+      "Bash(/usr/bin/curl -sI http://localhost:3001/gastos)",
+      "Bash(/usr/bin/curl -sI http://localhost:3001/empleados)",
+      "Bash(/usr/bin/curl -sI http://localhost:3001/pacientes)"
+    ]
+  }
+}

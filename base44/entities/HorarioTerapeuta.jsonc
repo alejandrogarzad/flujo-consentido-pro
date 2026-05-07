@@ -1,0 +1,26 @@
+{
+  "name": "HorarioTerapeuta",
+  "type": "object",
+  "properties": {
+    "empleado_id": {
+      "type": "string",
+      "description": "ID del empleado terapeuta"
+    },
+    "empleado_nombre": {
+      "type": "string"
+    },
+    "semana_inicio": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha del lunes de la semana (YYYY-MM-DD)"
+    },
+    "slots": {
+      "type": "object",
+      "description": "Mapa: {dia_hora: valor} e.g. {lunes_0900: 'Libre', martes_1030: 'Mar\u00eda Garc\u00eda'}"
+    }
+  },
+  "required": [
+    "empleado_id",
+    "semana_inicio"
+  ]
+}

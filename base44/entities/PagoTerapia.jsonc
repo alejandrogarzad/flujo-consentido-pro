@@ -1,0 +1,56 @@
+{
+  "name": "PagoTerapia",
+  "type": "object",
+  "properties": {
+    "paciente_id": {
+      "type": "string"
+    },
+    "paciente_nombre": {
+      "type": "string"
+    },
+    "anio": {
+      "type": "number"
+    },
+    "mes": {
+      "type": "number"
+    },
+    "fecha_pago": {
+      "type": "string",
+      "format": "date"
+    },
+    "dia_pago": {
+      "type": "number"
+    },
+    "monto_pagado": {
+      "type": "number",
+      "default": 0
+    },
+    "sesiones_manual": {
+      "type": "number",
+      "description": "Sesiones capturadas manualmente cuando no hay calendario guardado"
+    },
+    "forma_pago": {
+      "type": "string",
+      "enum": [
+        "Efectivo",
+        "Transferencia",
+        "Tarjeta",
+        "Dep\u00f3sito"
+      ],
+      "default": "Efectivo"
+    },
+    "notas": {
+      "type": "string"
+    },
+    "capturado_por": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "paciente_id",
+    "anio",
+    "mes",
+    "fecha_pago",
+    "monto_pagado"
+  ]
+}

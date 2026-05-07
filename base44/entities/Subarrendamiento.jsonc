@@ -1,0 +1,41 @@
+{
+  "name": "Subarrendamiento",
+  "type": "object",
+  "properties": {
+    "inquilino": {
+      "type": "string"
+    },
+    "forma_pago": {
+      "type": "string",
+      "enum": [
+        "Efectivo",
+        "Transferencia",
+        "Tarjeta",
+        "Dep\u00f3sito"
+      ],
+      "default": "Efectivo"
+    },
+    "renta_mensual_base": {
+      "type": "number",
+      "default": 0
+    },
+    "anio": {
+      "type": "number"
+    },
+    "mes": {
+      "type": "number"
+    },
+    "monto_cobrado": {
+      "type": "number",
+      "default": 0
+    },
+    "notas": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "inquilino",
+    "anio",
+    "mes"
+  ]
+}

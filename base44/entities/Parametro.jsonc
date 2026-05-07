@@ -1,0 +1,30 @@
+{
+  "name": "Parametro",
+  "type": "object",
+  "properties": {
+    "clave": {
+      "type": "string",
+      "description": "Identificador \u00fanico del par\u00e1metro"
+    },
+    "valor": {
+      "type": "string"
+    },
+    "descripcion": {
+      "type": "string"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "numero",
+        "porcentaje",
+        "dinero",
+        "texto"
+      ],
+      "default": "numero"
+    }
+  },
+  "required": [
+    "clave",
+    "valor"
+  ]
+}

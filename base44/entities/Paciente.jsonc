@@ -1,0 +1,146 @@
+{
+  "name": "Paciente",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre completo del paciente"
+    },
+    "forma_pago_default": {
+      "type": "string",
+      "enum": [
+        "Efectivo",
+        "Transferencia",
+        "Tarjeta",
+        "Dep\u00f3sito"
+      ],
+      "default": "Efectivo"
+    },
+    "precio_sesion_regular": {
+      "type": "number",
+      "default": 0,
+      "description": "Precio por sesi\u00f3n regular (puede diferir del global)"
+    },
+    "precio_sesion_matutina": {
+      "type": "number",
+      "default": 0,
+      "description": "Precio por sesi\u00f3n matutina (puede diferir del global)"
+    },
+    "mes_inicio": {
+      "type": "number",
+      "description": "Mes de inicio de terapia (1-12)"
+    },
+    "anio_inicio": {
+      "type": "number",
+      "description": "A\u00f1o de inicio de terapia"
+    },
+    "mes_alta": {
+      "type": "number",
+      "description": "Mes de alta / fin de terapia (1-12)"
+    },
+    "anio_alta": {
+      "type": "number",
+      "description": "A\u00f1o de alta / fin de terapia"
+    },
+    "tipo_terapia": {
+      "type": "string",
+      "description": "Ej: Integraci\u00f3n Sensorial, Terapia de Lenguaje"
+    },
+    "terapeutas": {
+      "type": "object",
+      "description": "Terapeuta asignada por d\u00eda de la semana",
+      "properties": {
+        "lunes": {
+          "type": "string"
+        },
+        "martes": {
+          "type": "string"
+        },
+        "miercoles": {
+          "type": "string"
+        },
+        "jueves": {
+          "type": "string"
+        },
+        "viernes": {
+          "type": "string"
+        },
+        "sabado": {
+          "type": "string"
+        },
+        "domingo": {
+          "type": "string"
+        }
+      }
+    },
+    "dias_sesion": {
+      "type": "object",
+      "description": "Horario semanal: hora y tipo por d\u00eda",
+      "properties": {
+        "lunes": {
+          "type": "string"
+        },
+        "martes": {
+          "type": "string"
+        },
+        "miercoles": {
+          "type": "string"
+        },
+        "jueves": {
+          "type": "string"
+        },
+        "viernes": {
+          "type": "string"
+        },
+        "sabado": {
+          "type": "string"
+        },
+        "domingo": {
+          "type": "string"
+        }
+      }
+    },
+    "tipo_sesion": {
+      "type": "object",
+      "description": "Tipo de sesi\u00f3n por d\u00eda: Regular o Matutina",
+      "properties": {
+        "lunes": {
+          "type": "string"
+        },
+        "martes": {
+          "type": "string"
+        },
+        "miercoles": {
+          "type": "string"
+        },
+        "jueves": {
+          "type": "string"
+        },
+        "viernes": {
+          "type": "string"
+        },
+        "sabado": {
+          "type": "string"
+        },
+        "domingo": {
+          "type": "string"
+        }
+      }
+    },
+    "estatus": {
+      "type": "string",
+      "enum": [
+        "Activo",
+        "Inactivo",
+        "Pausado"
+      ],
+      "default": "Activo"
+    },
+    "notas": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}

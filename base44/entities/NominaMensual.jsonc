@@ -1,0 +1,47 @@
+{
+  "name": "NominaMensual",
+  "type": "object",
+  "properties": {
+    "empleado_id": {
+      "type": "string"
+    },
+    "empleado_nombre": {
+      "type": "string"
+    },
+    "anio": {
+      "type": "number"
+    },
+    "mes": {
+      "type": "number"
+    },
+    "sueldo_transferencia": {
+      "type": "number",
+      "default": 0
+    },
+    "sueldo_efectivo": {
+      "type": "number",
+      "default": 0
+    },
+    "aguinaldo": {
+      "type": "number",
+      "default": 0
+    },
+    "vacaciones": {
+      "type": "number",
+      "default": 0
+    },
+    "bono": {
+      "type": "number",
+      "default": 0,
+      "description": "Bono anual por cumplimiento de objetivos (se captura en diciembre)"
+    },
+    "notas": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "empleado_id",
+    "anio",
+    "mes"
+  ]
+}

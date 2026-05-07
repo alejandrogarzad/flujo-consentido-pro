@@ -1,0 +1,77 @@
+{
+  "name": "CalendarioPaciente",
+  "type": "object",
+  "properties": {
+    "paciente_id": {
+      "type": "string"
+    },
+    "paciente_nombre": {
+      "type": "string"
+    },
+    "anio": {
+      "type": "number"
+    },
+    "mes": {
+      "type": "number"
+    },
+    "horario": {
+      "type": "object",
+      "description": "Hora por d\u00eda: {lunes: '3pm', martes: '', ...}"
+    },
+    "tipo_sesion": {
+      "type": "object",
+      "description": "Tipo por d\u00eda: {lunes: 'Regular', martes: 'Matutina', ...}"
+    },
+    "terapeutas": {
+      "type": "object",
+      "description": "Terapeuta por d\u00eda: {lunes: 'Ana', ...}"
+    },
+    "excepciones": {
+      "type": "string",
+      "description": "D\u00edas sin sesi\u00f3n separados por coma, ej: 1,3,17"
+    },
+    "reposiciones": {
+      "type": "array",
+      "description": "Array de {dia, hora, tipoRep}",
+      "items": {
+        "type": "object"
+      }
+    },
+    "total_sesiones": {
+      "type": "number",
+      "default": 0
+    },
+    "sesiones_regulares": {
+      "type": "number",
+      "default": 0
+    },
+    "sesiones_matutinas": {
+      "type": "number",
+      "default": 0
+    },
+    "reposiciones_count": {
+      "type": "number",
+      "default": 0
+    },
+    "monto_efectivo": {
+      "type": "number",
+      "default": 0
+    },
+    "monto_transferencia": {
+      "type": "number",
+      "default": 0
+    },
+    "monto_override": {
+      "type": "number",
+      "description": "Override manual del monto efectivo. Si est\u00e1 definido, reemplaza el calculado autom\u00e1ticamente."
+    },
+    "notas": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "paciente_id",
+    "anio",
+    "mes"
+  ]
+}

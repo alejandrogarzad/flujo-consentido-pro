@@ -1,0 +1,40 @@
+{
+  "name": "ResumenIngreso",
+  "type": "object",
+  "properties": {
+    "anio": {
+      "type": "number"
+    },
+    "mes": {
+      "type": "number",
+      "description": "1-12"
+    },
+    "terapias": {
+      "type": "number",
+      "default": 0
+    },
+    "citas": {
+      "type": "number",
+      "default": 0
+    },
+    "evaluaciones": {
+      "type": "number",
+      "default": 0
+    },
+    "subarrendamiento": {
+      "type": "number",
+      "default": 0
+    },
+    "otros": {
+      "type": "number",
+      "default": 0
+    },
+    "notas": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "anio",
+    "mes"
+  ]
+}
