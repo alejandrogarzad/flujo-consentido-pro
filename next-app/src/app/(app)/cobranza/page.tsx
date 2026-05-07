@@ -100,68 +100,94 @@ export default function CobranzaPage() {
 
       const pagosMes = allPagos.filter((p) => p.mes === filtroMes && p.anio === filtroAnio);
 
-      // Saldos a favor de meses anteriores
+      // Saldos arrastrados (a favor o en contra) desde mayo 2026 hasta el mes
+      // anterior al filtrado. Por cada (paciente, mes) en el rango calculamos
+      // expected vs paid; la suma queda en `saldos` (signed):
+      //   > 0: paciente tiene crédito (a favor)
+      //   < 0: paciente debe (en contra) — se arrastra al mes filtrado
       const mesBaseInicio = { anio: 2026, mes: 5 };
-      const filtroEsAnteriorABase = filtroAnio < mesBaseInicio.anio || (filtroAnio === mesBaseInicio.anio && filtroMes <= mesBaseInicio.mes);
-      const pagosAnteriores = filtroEsAnteriorABase ? [] : allPagos.filter((p) => {
-        const pAnio = p.anio || 2026;
-        return pAnio < filtroAnio || (pAnio === filtroAnio && p.mes < filtroMes);
-      });
-
-      const saldos: Record<string, number> = {};
-      const porPacMes: Record<string, { paciente_id: string; anio: number; mes: number; pagos: PagoTerapia[] }> = {};
-      pagosAnteriores.forEach((p) => {
-        const k = `${p.paciente_id}_${p.anio || 2026}_${p.mes}`;
-        if (!porPacMes[k]) porPacMes[k] = { paciente_id: p.paciente_id, anio: p.anio || 2026, mes: p.mes, pagos: [] };
-        porPacMes[k].pagos.push(p);
-      });
+      const baseVal = mesBaseInicio.anio * 100 + mesBaseInicio.mes;
+      const filtroVal = filtroAnio * 100 + filtroMes;
+      const filtroEsAnteriorABase = filtroVal <= baseVal;
 
       const ivaRateLocal = Number(params.iva ?? 0.16);
       const precioRegularLocal = Number(params.precio_terapia_regular ?? 1100);
       const precioMatLocal = Number(params.precio_terapia_matutina ?? 900);
       const pacMapAnt = Object.fromEntries(allPacientes.map((p) => [p.id, p]));
-      Object.values(porPacMes).forEach(({ paciente_id, anio, mes, pagos }) => {
-        const montoPagadoTotal = pagos.reduce((s, p) => s + Number(p.monto_pagado || 0), 0);
-        const forma = pagos[0]?.forma_pago || "Efectivo";
-        const conIva = CON_IVA_FORMAS.includes(forma);
-        const cal = allCals.find((c) => c.paciente_id === paciente_id && c.anio === anio && c.mes === mes);
-        // Usar precio del paciente si está definido, si no global. Misma lógica
-        // que el cálculo principal (calcularSesionesDesdeCal) — sino los pacientes
-        // con precio distinto al global generan saldos a favor falsos.
-        const pac = pacMapAnt[paciente_id];
-        const pReg = Number(pac?.precio_sesion_regular) || precioRegularLocal;
-        const pMat = Number(pac?.precio_sesion_matutina) || precioMatLocal;
-        let totalEsperado: number | null = null;
-        if (cal) {
-          // Confiar en cal.sesiones_matutinas / cal.sesiones_regulares /
-          // reposiciones_count guardados (computados al guardar el calendario,
-          // respetando asuetos). Si todos están en 0, el calendario no tiene
-          // info real — no generar saldo a favor (skip).
-          const sM = Number(cal.sesiones_matutinas) || 0;
-          const sR = Number(cal.sesiones_regulares) || 0;
-          const rC = Number(cal.reposiciones_count) || 0;
-          const totalSes = sM + sR + rC;
-          if (totalSes > 0) {
-            // Recalcular monto LIVE con precio per-paciente
-            let monto = sM * pMat + sR * pReg + rC * pReg;
-            const recargoPago = pagos[0]?.recargo ? monto * 0.1 : 0;
-            monto += recargoPago;
-            totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
+      const saldos: Record<string, number> = {};
+
+      if (!filtroEsAnteriorABase) {
+        // Pagos solo entre mayo (incl) y mes anterior al filtrado (excl)
+        const pagosEnRango = allPagos.filter((p) => {
+          const pVal = (p.anio || 2026) * 100 + p.mes;
+          return pVal >= baseVal && pVal < filtroVal;
+        });
+        // Calendarios en el mismo rango (capturan deuda aunque no haya pago)
+        const calsEnRango = allCals.filter((c) => {
+          const cVal = (c.anio || 0) * 100 + (c.mes || 0);
+          return cVal >= baseVal && cVal < filtroVal;
+        });
+
+        // Combinar claves (paciente_id, anio, mes) de pagos + calendarios
+        const pagosPorKey: Record<string, PagoTerapia[]> = {};
+        const claves = new Set<string>();
+        pagosEnRango.forEach((p) => {
+          const k = `${p.paciente_id}|${p.anio || 2026}|${p.mes}`;
+          claves.add(k);
+          (pagosPorKey[k] = pagosPorKey[k] || []).push(p);
+        });
+        calsEnRango.forEach((c) => {
+          claves.add(`${c.paciente_id}|${c.anio}|${c.mes}`);
+        });
+
+        claves.forEach((k) => {
+          const [paciente_id, anioStr, mesStr] = k.split("|");
+          const anio = Number(anioStr);
+          const mes = Number(mesStr);
+          const pac = pacMapAnt[paciente_id];
+          if (!pac) return;
+          if (!pacienteAplicaEnMes(pac, mes, anio)) return;
+
+          const pagos = pagosPorKey[k] || [];
+          const cal = allCals.find((c) => c.paciente_id === paciente_id && c.anio === anio && c.mes === mes);
+          const montoPagadoTotal = pagos.reduce((s, p) => s + Number(p.monto_pagado || 0), 0);
+          const forma = pagos[0]?.forma_pago || pac.forma_pago_default || "Efectivo";
+          const conIva = CON_IVA_FORMAS.includes(forma);
+          const pReg = Number(pac.precio_sesion_regular) || precioRegularLocal;
+          const pMat = Number(pac.precio_sesion_matutina) || precioMatLocal;
+
+          let totalEsperado: number | null = null;
+          if (cal) {
+            const sM = Number(cal.sesiones_matutinas) || 0;
+            const sR = Number(cal.sesiones_regulares) || 0;
+            const rC = Number(cal.reposiciones_count) || 0;
+            const totalSes = sM + sR + rC;
+            if (totalSes > 0) {
+              let monto = sM * pMat + sR * pReg + rC * pReg;
+              const recargoPago = pagos[0]?.recargo ? monto * 0.1 : 0;
+              monto += recargoPago;
+              totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
+            }
+          } else if (pagos[0]?.sesiones_manual != null) {
+            const ses = Number(pagos[0].sesiones_manual);
+            if (ses > 0) {
+              const monto = ses * pReg;
+              totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
+            }
           }
-        } else if (pagos[0]?.sesiones_manual != null) {
-          const ses = Number(pagos[0].sesiones_manual);
-          if (ses > 0) {
-            const monto = ses * pReg;
-            totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
+
+          if (totalEsperado !== null && totalEsperado > 0) {
+            const pagadoReal = conIva ? Math.round(montoPagadoTotal * (1 + ivaRateLocal)) : montoPagadoTotal;
+            const dif = pagadoReal - totalEsperado;
+            // Tolerancia $50 (ruido de IVA/redondeo). Acumula AMBAS direcciones:
+            //   dif > 50  → saldo a favor (positivo)
+            //   dif < -50 → saldo en contra (negativo, se arrastra como deuda)
+            if (Math.abs(dif) > 50) {
+              saldos[paciente_id] = (saldos[paciente_id] || 0) + dif;
+            }
           }
-        }
-        if (totalEsperado !== null && totalEsperado > 0) {
-          const pagadoReal = conIva ? Math.round(montoPagadoTotal * (1 + ivaRateLocal)) : montoPagadoTotal;
-          const dif = pagadoReal - totalEsperado;
-          // Tolerancia $50 para evitar ruido por redondeo de IVA / décimas
-          if (dif > 50) saldos[paciente_id] = (saldos[paciente_id] || 0) + dif;
-        }
-      });
+        });
+      }
       setSaldosAFavor(saldos);
 
       const calsValidas = cals.filter((cal) => {
@@ -439,7 +465,7 @@ export default function CobranzaPage() {
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Forma de Pago</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Pagado (sin IVA)</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Con IVA</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">A favor (mes ant.)</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Saldo previo</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Saldo</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-stone-500">Estatus</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-stone-500"></th>
@@ -495,7 +521,17 @@ export default function CobranzaPage() {
                         {row.pagadoConIva !== null ? fmtMXN(row.pagadoConIva) : <span className="text-stone-300">—</span>}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {row.saldoAFavor > 0 ? <span className="text-blue-600 font-medium">{fmtMXN(row.saldoAFavor)}</span> : <span className="text-stone-300">—</span>}
+                        {row.saldoAFavor === 0 ? (
+                          <span className="text-stone-300">—</span>
+                        ) : row.saldoAFavor > 0 ? (
+                          <span className="text-blue-600 font-medium" title="Saldo a favor del mes anterior">
+                            +{fmtMXN(row.saldoAFavor)}
+                          </span>
+                        ) : (
+                          <span className="text-red-600 font-medium" title="Deuda arrastrada del mes anterior">
+                            {fmtMXN(row.saldoAFavor)}
+                          </span>
+                        )}
                       </td>
                       <td className={`px-4 py-3 text-right font-medium ${row.saldo !== null && row.saldo > 0 ? "text-red-600" : "text-green-600"}`}>
                         {row.saldo !== null ? fmtMXN(Math.max(0, row.saldo)) : <span className="text-stone-300">—</span>}
