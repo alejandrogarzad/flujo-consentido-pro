@@ -9,6 +9,7 @@ import {
   Menu, X, Calendar, Calculator, CalendarDays, Loader2,
 } from "lucide-react";
 import { db, type AuthUser } from "@/lib/db";
+import { canAccess } from "@/lib/permissions";
 
 const NAV_ITEMS = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -80,7 +81,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-3">
-          {NAV_ITEMS.map(({ path, label, icon: Icon }) => {
+          {NAV_ITEMS.filter((item) => !user || canAccess(user.role, item.path)).map(({ path, label, icon: Icon }) => {
             const active = pathname === path || pathname.startsWith(`${path}/`);
             return (
               <Link

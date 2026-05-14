@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, X, Edit2, Trash2, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { db, type AuthUser } from "@/lib/db";
+import {
+  isLimitedToCurrentMonth, canCreateEvento, canEditEvento, canDeleteEvento,
+} from "@/lib/permissions";
 import { calcularTotalEvento, paramsToObject, fmtMXN, MESES, type ParamMap } from "@/lib/calculos";
 import type { Evento, FormaPago, Paciente, TipoEvento } from "@/types/db";
 
@@ -48,6 +51,21 @@ export default function CitasEvaluacionesPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [pagoEvento, setPagoEvento] = useState<Evento | null>(null);
+
+  // Permisos del rol actual
+  const restrictedMonth = isLimitedToCurrentMonth(user?.role);
+  const canNew = canCreateEvento(user?.role);
+  const canEdit = canEditEvento(user?.role);
+  const canDel = canDeleteEvento(user?.role);
+
+  // Forzar mes/año actual si el rol está restringido
+  useEffect(() => {
+    if (restrictedMonth) {
+      const now = new Date();
+      setFiltroMes(now.getMonth() + 1);
+      setFiltroAnio(now.getFullYear());
+    }
+  }, [restrictedMonth]);
 
   const PRECIOS_DEFAULT: Record<TipoEvento, number> = {
     "Cita inicial / ingreso": Number(params.precio_cita_inicial ?? 1000),
@@ -182,15 +200,27 @@ export default function CitasEvaluacionesPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-stone-800">Citas y Evaluaciones</h1>
         <div className="flex items-center gap-2">
-          <select value={filtroMes} onChange={(e) => setFiltroMes(Number(e.target.value))}
-            className="border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200">
+          <select
+            value={filtroMes}
+            onChange={(e) => setFiltroMes(Number(e.target.value))}
+            disabled={restrictedMonth}
+            title={restrictedMonth ? "Solo puedes capturar el mes en curso" : undefined}
+            className="border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200 disabled:bg-stone-100 disabled:text-stone-500 disabled:cursor-not-allowed"
+          >
             {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
           </select>
-          <input type="number" value={filtroAnio} onChange={(e) => setFiltroAnio(Number(e.target.value))}
-            className="w-24 border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
-          <button onClick={openNew} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-xl">
-            <Plus size={16} /> {tab === "citas" ? "Nueva Cita" : "Nueva Evaluación"}
-          </button>
+          <input
+            type="number"
+            value={filtroAnio}
+            onChange={(e) => setFiltroAnio(Number(e.target.value))}
+            disabled={restrictedMonth}
+            className="w-24 border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none disabled:bg-stone-100 disabled:text-stone-500 disabled:cursor-not-allowed"
+          />
+          {canNew && (
+            <button onClick={openNew} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-xl">
+              <Plus size={16} /> {tab === "citas" ? "Nueva Cita" : "Nueva Evaluación"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -238,8 +268,8 @@ export default function CitasEvaluacionesPage() {
                     <td className={`px-4 py-3 text-right font-medium ${c.saldo > 0 ? "text-red-600" : "text-green-600"}`}>{fmtMXN(c.saldo)}</td>
                     <td className="px-4 py-3 text-right">
                       {c.saldo > 0 && <button onClick={() => setPagoEvento(ev)} title="Registrar pago" className="text-stone-400 hover:text-green-600 mr-2"><DollarSign size={14} /></button>}
-                      <button onClick={() => openEdit(ev)} className="text-stone-400 hover:text-violet-600 mr-2"><Edit2 size={14} /></button>
-                      <button onClick={() => del(ev.id)} className="text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>
+                      {canEdit && <button onClick={() => openEdit(ev)} className="text-stone-400 hover:text-violet-600 mr-2"><Edit2 size={14} /></button>}
+                      {canDel && <button onClick={() => del(ev.id)} className="text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>}
                     </td>
                   </tr>
                 );

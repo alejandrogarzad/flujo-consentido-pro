@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { updateSession } from "@/lib/supabase/middleware";
+import { canAccess, defaultPathFor } from "@/lib/permissions";
+import type { AppRole } from "@/types/db";
 
 const PUBLIC_PATHS = ["/login", "/api/auth"];
 
@@ -20,15 +22,13 @@ export async function middleware(request: NextRequest) {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return response;
 
-  // Cliente lectura-only para verificar sesión sin volver a escribir cookies
-  // (updateSession ya las dejó al día).
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
       setAll() {
-        // no-op: updateSession ya manejó la escritura
+        // updateSession ya manejó la escritura
       },
     },
   });
@@ -40,6 +40,20 @@ export async function middleware(request: NextRequest) {
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("redirectTo", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Verificar role-based path access (cap_pagos solo puede /cobranza y
+  // /citas-evaluaciones, etc.). La raíz "/" se permite pasar para que el
+  // page.tsx haga su propio redirect.
+  if (pathname !== "/") {
+    const { data: profile } = await supabase.from("profile").select("role").eq("id", user.id).maybeSingle();
+    const role = (profile?.role as AppRole | undefined) ?? "user";
+    if (!canAccess(role, pathname)) {
+      const target = request.nextUrl.clone();
+      target.pathname = defaultPathFor(role);
+      target.search = "";
+      return NextResponse.redirect(target);
+    }
   }
 
   return response;

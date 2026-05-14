@@ -11,7 +11,8 @@
       "Bash(/usr/bin/curl -sI http://localhost:3001/subarrendamiento)",
       "Bash(/usr/bin/curl -sI http://localhost:3001/gastos)",
       "Bash(/usr/bin/curl -sI http://localhost:3001/empleados)",
-      "Bash(/usr/bin/curl -sI http://localhost:3001/pacientes)"
+      "Bash(/usr/bin/curl -sI http://localhost:3001/pacientes)",
+      "Bash(node supabase/scripts/seed-capturista.mjs)"
     ]
   }
 }

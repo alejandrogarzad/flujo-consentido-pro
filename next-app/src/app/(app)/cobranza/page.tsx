@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Calendar, Search, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { db } from "@/lib/db";
+import { db, type AuthUser } from "@/lib/db";
+import { isLimitedToCurrentMonth, canEditSesiones, canDeletePago } from "@/lib/permissions";
 import {
   generarCalendario, paramsToObject, fmtMXN, estatusCxC, MESES, pacienteAplicaEnMes,
   type ParamMap, type EstatusCxC,
@@ -76,16 +77,32 @@ export default function CobranzaPage() {
   const [busqueda, setBusqueda] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [guardadoOk, setGuardadoOk] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   const [calendarios, setCalendarios] = useState<CalendarioPaciente[]>([]);
   const [pagosDB, setPagosDB] = useState<PagoTerapia[]>([]);
   const [saldosAFavor, setSaldosAFavor] = useState<Record<string, number>>({});
   const [edits, setEdits] = useState<Record<string, EditState>>({});
 
-  // Cargar params
+  // Permisos del rol actual
+  const restrictedMonth = isLimitedToCurrentMonth(currentUser?.role);
+  const canEditSes = canEditSesiones(currentUser?.role);
+  const canDel = canDeletePago(currentUser?.role);
+
+  // Cargar params + usuario
   useEffect(() => {
     db.parametro.list("clave").then((p) => setParams(paramsToObject(p)));
+    db.auth.me().then(setCurrentUser);
   }, []);
+
+  // Forzar mes/año actual si el rol está restringido
+  useEffect(() => {
+    if (restrictedMonth) {
+      const now = new Date();
+      setFiltroMes(now.getMonth() + 1);
+      setFiltroAnio(now.getFullYear());
+    }
+  }, [restrictedMonth]);
 
   const cargarMes = useCallback(async () => {
     if (Object.keys(params).length === 0) return;
@@ -444,12 +461,22 @@ export default function CobranzaPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <select value={filtroMes} onChange={(e) => setFiltroMes(Number(e.target.value))}
-            className="border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200">
+          <select
+            value={filtroMes}
+            onChange={(e) => setFiltroMes(Number(e.target.value))}
+            disabled={restrictedMonth}
+            title={restrictedMonth ? "Solo puedes capturar el mes en curso" : undefined}
+            className="border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200 disabled:bg-stone-100 disabled:text-stone-500 disabled:cursor-not-allowed"
+          >
             {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
           </select>
-          <input type="number" value={filtroAnio} onChange={(e) => setFiltroAnio(Number(e.target.value))}
-            className="w-24 border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
+          <input
+            type="number"
+            value={filtroAnio}
+            onChange={(e) => setFiltroAnio(Number(e.target.value))}
+            disabled={restrictedMonth}
+            className="w-24 border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none disabled:bg-stone-100 disabled:text-stone-500 disabled:cursor-not-allowed"
+          />
         </div>
       </div>
 
@@ -493,7 +520,9 @@ export default function CobranzaPage() {
                           value={edit.sesiones ?? (row.tieneCal ? row.totalSesiones ?? "" : "")}
                           placeholder="—"
                           onChange={(e) => setEdit(row.paciente_id, "sesiones", e.target.value === "" ? null : Number(e.target.value))}
-                          className="w-14 border border-stone-200 rounded-lg px-1 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-violet-200" />
+                          disabled={!canEditSes}
+                          title={!canEditSes ? "Solo el admin puede ajustar sesiones" : undefined}
+                          className="w-14 border border-stone-200 rounded-lg px-1 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-violet-200 disabled:bg-stone-100 disabled:text-stone-500 disabled:cursor-not-allowed" />
                       </td>
                       <td className="px-4 py-3 text-right text-stone-700">
                         {row.totalEsperado !== null ? fmtMXN(row.totalEsperado) : <span className="text-stone-300">—</span>}
@@ -542,10 +571,12 @@ export default function CobranzaPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button onClick={() => eliminarPago(pagosDB.find((p) => p.paciente_id === row.paciente_id)?.id)}
-                          className="text-red-400 hover:text-red-600" title="Eliminar pago">
-                          <Trash2 size={14} />
-                        </button>
+                        {canDel && (
+                          <button onClick={() => eliminarPago(pagosDB.find((p) => p.paciente_id === row.paciente_id)?.id)}
+                            className="text-red-400 hover:text-red-600" title="Eliminar pago">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
