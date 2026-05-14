@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { db } from "@/lib/db";
 import {
   generarCalendario, fmtMXN, MESES, paramsToObject, DIAS_SEMANA, pacienteAplicaEnMes,
+  precioPorSesion,
   type ParamMap,
 } from "@/lib/calculos";
 import type {
@@ -33,15 +34,14 @@ function calcularMontos(
   reposicionesValidas: Reposicion[],
 ) {
   const ivaRate = Number(params.iva ?? 0.16);
-  const precioGlobal = Number(params.precio_terapia_regular ?? 1100);
-  const precioPorSesion = Number(paciente?.precio_sesion_regular) || precioGlobal;
+  const precioReg = precioPorSesion(paciente, params, "Regular");
 
   let montoEfectivo = 0;
   celdas.flat().forEach((c) => {
-    if (c.tipo === "sesion") montoEfectivo += precioPorSesion;
+    if (c.tipo === "sesion") montoEfectivo += precioReg;
   });
   reposicionesValidas.forEach(() => {
-    montoEfectivo += precioPorSesion;
+    montoEfectivo += precioReg;
   });
   const montoTransferencia = Math.round(montoEfectivo * (1 + ivaRate));
   return { montoEfectivo, montoTransferencia };
@@ -293,12 +293,11 @@ export default function CalendariosPage() {
         const { celdas: c2, totalSesiones: t2 } = generarCalendario(cal.anio, cal.mes, cal.horario || {}, excTotalesStr);
         const repsValidas = (cal.reposiciones || []).filter((r) => r.dia && r.hora);
         const pac = pacientes.find((p) => p.id === cal.paciente_id);
-        const precioGlobal = Number(params.precio_terapia_regular ?? 1100);
-        const precioPorSesion = Number(pac?.precio_sesion_regular) || precioGlobal;
+        const precioReg = precioPorSesion(pac, params, "Regular");
         const ivaRate = Number(params.iva ?? 0.16);
         let me = 0;
-        c2.flat().forEach((cc) => { if (cc.tipo === "sesion") me += precioPorSesion; });
-        repsValidas.forEach(() => { me += precioPorSesion; });
+        c2.flat().forEach((cc) => { if (cc.tipo === "sesion") me += precioReg; });
+        repsValidas.forEach(() => { me += precioReg; });
         const mt = Math.round(me * (1 + ivaRate));
         let sR = 0;
         let sM = 0;
@@ -355,19 +354,19 @@ export default function CalendariosPage() {
           const { celdas: c2, totalSesiones: t2 } = generarCalendario(cal.anio, cal.mes, cal.horario || {}, excTotales);
           const repsValidas = (cal.reposiciones || []).filter((r) => r.dia && r.hora);
           const pac = pacMap[cal.paciente_id];
-          const precioPorSesion = Number(pac?.precio_sesion_regular) || precioGlobal;
+          const precioReg = precioPorSesion(pac, params, "Regular");
           let me = 0;
           let sR = 0;
           let sM = 0;
           c2.flat().forEach((cc) => {
             if (cc.tipo !== "sesion" || cc.diaSemana === undefined) return;
-            me += precioPorSesion;
+            me += precioReg;
             const diaKey = DIAS_KEY[cc.diaSemana];
             if ((cal.tipo_sesion?.[diaKey] ?? "Regular") === "Matutina") sM++;
             else sR++;
           });
           repsValidas.forEach((r) => {
-            me += precioPorSesion;
+            me += precioReg;
             if (r.tipoRep === "Matutina") sM++;
             else sR++;
           });

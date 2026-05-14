@@ -5,6 +5,7 @@ import { Calendar, Search, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { db, type AuthUser } from "@/lib/db";
 import { isLimitedToCurrentMonth, canEditSesiones, canDeletePago } from "@/lib/permissions";
+import { precioPorSesion } from "@/lib/calculos";
 import {
   generarCalendario, paramsToObject, fmtMXN, estatusCxC, MESES, pacienteAplicaEnMes,
   type ParamMap, type EstatusCxC,
@@ -37,21 +38,25 @@ interface CobranzaRow {
 }
 
 function calcularSesionesDesdeCal(
-  cal: { anio: number; mes: number; horario: Record<string, string>; excepciones?: string | null; reposiciones?: any[]; total_sesiones?: number; monto_efectivo?: number },
+  cal: { anio: number; mes: number; horario: Record<string, string>; excepciones?: string | null; reposiciones?: any[]; total_sesiones?: number; monto_efectivo?: number; monto_override?: number | null },
   params: ParamMap,
   paciente?: Paciente | null,
 ) {
-  // Precio LIVE: paciente.precio_sesion_regular si está definido, sino global.
-  // Recalcular live (en vez de usar cal.monto_efectivo guardado) permite que
-  // un cambio en el precio del paciente refleje sin re-guardar cada calendario.
-  const precioGlobal = Number(params.precio_terapia_regular ?? 1100);
-  const precioPorSesion = Number(paciente?.precio_sesion_regular) || precioGlobal;
+  // Precio LIVE: usa helper que respeta convención NULL = global, 0 = literal.
+  const precioReg = precioPorSesion(paciente, params, "Regular");
+
+  // Override manual del calendario: si está seteado, RESPETARLO siempre
+  // (incluso si es 0). El override representa el monto efectivo acordado
+  // para ese mes específico (ej. paciente que paga menos de lo calculado).
+  const savedSes = Number(cal.total_sesiones) || 0;
+  if (cal.monto_override !== null && cal.monto_override !== undefined) {
+    return { totalSesiones: savedSes, montoEfectivo: Number(cal.monto_override) };
+  }
 
   // Conteo de sesiones: trust the saved cal.total_sesiones (aplica asuetos
   // y reposiciones correctamente). Solo recompute si no hay valor guardado.
-  const savedSes = Number(cal.total_sesiones) || 0;
   if (savedSes > 0) {
-    return { totalSesiones: savedSes, montoEfectivo: savedSes * precioPorSesion };
+    return { totalSesiones: savedSes, montoEfectivo: savedSes * precioReg };
   }
   const { celdas } = generarCalendario(cal.anio, cal.mes, cal.horario || {}, cal.excepciones || "");
   const reposicionesValidas = (cal.reposiciones || []).filter((r: any) => r.dia && r.hora);
@@ -60,11 +65,11 @@ function calcularSesionesDesdeCal(
   celdas.flat().forEach((c) => {
     if (c.tipo !== "sesion") return;
     totalSesiones++;
-    montoEfectivo += precioPorSesion;
+    montoEfectivo += precioReg;
   });
   reposicionesValidas.forEach(() => {
     totalSesiones++;
-    montoEfectivo += precioPorSesion;
+    montoEfectivo += precioReg;
   });
   return { totalSesiones, montoEfectivo };
 }
@@ -170,20 +175,26 @@ export default function CobranzaPage() {
           const montoPagadoTotal = pagos.reduce((s, p) => s + Number(p.monto_pagado || 0), 0);
           const forma = pagos[0]?.forma_pago || pac.forma_pago_default || "Efectivo";
           const conIva = CON_IVA_FORMAS.includes(forma);
-          const pReg = Number(pac.precio_sesion_regular) || precioRegularLocal;
-          const pMat = Number(pac.precio_sesion_matutina) || precioMatLocal;
+          const pReg = precioPorSesion(pac, params, "Regular");
+          const pMat = precioPorSesion(pac, params, "Matutina");
 
           let totalEsperado: number | null = null;
           if (cal) {
-            const sM = Number(cal.sesiones_matutinas) || 0;
-            const sR = Number(cal.sesiones_regulares) || 0;
-            const rC = Number(cal.reposiciones_count) || 0;
-            const totalSes = sM + sR + rC;
-            if (totalSes > 0) {
-              let monto = sM * pMat + sR * pReg + rC * pReg;
-              const recargoPago = pagos[0]?.recargo ? monto * 0.1 : 0;
-              monto += recargoPago;
+            // Si hay override, úsalo (incluso 0)
+            if (cal.monto_override !== null && cal.monto_override !== undefined) {
+              const monto = Number(cal.monto_override);
               totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
+            } else {
+              const sM = Number(cal.sesiones_matutinas) || 0;
+              const sR = Number(cal.sesiones_regulares) || 0;
+              const rC = Number(cal.reposiciones_count) || 0;
+              const totalSes = sM + sR + rC;
+              if (totalSes > 0) {
+                let monto = sM * pMat + sR * pReg + rC * pReg;
+                const recargoPago = pagos[0]?.recargo ? monto * 0.1 : 0;
+                monto += recargoPago;
+                totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
+              }
             }
           } else if (pagos[0]?.sesiones_manual != null) {
             const ses = Number(pagos[0].sesiones_manual);
@@ -193,7 +204,8 @@ export default function CobranzaPage() {
             }
           }
 
-          if (totalEsperado !== null && totalEsperado > 0) {
+          // totalEsperado puede ser 0 legítimo (override=0, beca completa).
+          if (totalEsperado !== null && totalEsperado >= 0) {
             const pagadoReal = conIva ? Math.round(montoPagadoTotal * (1 + ivaRateLocal)) : montoPagadoTotal;
             const dif = pagadoReal - totalEsperado;
             // Tolerancia $50 (ruido de IVA/redondeo). Acumula AMBAS direcciones:
@@ -288,14 +300,9 @@ export default function CobranzaPage() {
 
     if (edit.sesiones !== null && edit.sesiones !== undefined) {
       totalSesiones = Number(edit.sesiones);
-      // Precio por sesión: paciente.precio_sesion_regular si está definido (>0),
-      // sino el precio derivado del calendario guardado, sino el global.
+      // Precio: helper respeta NULL=global, 0=literal, >0=ese precio
       const pac = pacienteMap[paciente_id];
-      const precioPac = Number(pac?.precio_sesion_regular) || 0;
-      const precioCal = cal && Number(cal.monto_efectivo) > 0 && Number(cal.total_sesiones) > 0
-        ? Math.round(Number(cal.monto_efectivo) / Number(cal.total_sesiones))
-        : 0;
-      const precioEfectivo = precioPac || precioCal || precioRegular;
+      const precioEfectivo = precioPorSesion(pac, params, "Regular");
       montoEfectivo = totalSesiones * precioEfectivo;
     }
 

@@ -107,16 +107,33 @@ export interface ResultadoTerapia {
   sesiones: number;
 }
 
+// Precio por sesión según convención:
+//   NULL en paciente            → usa precio global de parámetros
+//   0 en paciente               → literal $0 (no cobra, ej. beca completa)
+//   >0 en paciente              → ese precio
+// Crítico: ?? (nullish) en vez de || (falsy), si no el 0 explícito se pierde.
+export function precioPorSesion(
+  paciente: Pick<Paciente, "precio_sesion_regular" | "precio_sesion_matutina"> | null | undefined,
+  params: ParamMap,
+  tipo: "Regular" | "Matutina" = "Regular",
+): number {
+  const claveGlobal = tipo === "Matutina" ? "precio_terapia_matutina" : "precio_terapia_regular";
+  const fallback = tipo === "Matutina" ? 900 : 1100;
+  const personal = tipo === "Matutina" ? paciente?.precio_sesion_matutina : paciente?.precio_sesion_regular;
+  if (personal === null || personal === undefined) {
+    return Number(params[claveGlobal] ?? fallback);
+  }
+  return Number(personal); // puede ser 0 (literal "no cobra")
+}
+
 export function calcularTotalTerapia(
   sesion: SesionCobranza | null | undefined,
   pago: PagoCobranza | null | undefined,
   params: ParamMap,
   paciente: Paciente | null | undefined,
 ): ResultadoTerapia {
-  const precPacMat = Number(paciente?.precio_sesion_matutina);
-  const precioMat = precPacMat > 0 ? precPacMat : Number(params.precio_terapia_matutina ?? 900);
-  const precPacReg = Number(paciente?.precio_sesion_regular);
-  const precioReg = precPacReg > 0 ? precPacReg : Number(params.precio_terapia_regular ?? 1100);
+  const precioMat = precioPorSesion(paciente, params, "Matutina");
+  const precioReg = precioPorSesion(paciente, params, "Regular");
   const ivaRate = Number(params.iva ?? 0.16);
   const recargoPct = Number(params.recargo_pago_tarde ?? 0.10);
   const diaTope = Number(params.dia_tope_pago ?? 10);

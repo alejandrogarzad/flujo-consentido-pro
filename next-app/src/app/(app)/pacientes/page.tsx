@@ -19,8 +19,8 @@ const emptyDias = (): HorarioSemanal => ({
 
 interface FormState {
   nombre: string;
-  precio_sesion_regular: number;
-  precio_sesion_matutina: number;
+  precio_sesion_regular: number | null;
+  precio_sesion_matutina: number | null;
   mes_inicio: number | null;
   anio_inicio: number | null;
   mes_alta: number | null;
@@ -34,8 +34,8 @@ interface FormState {
 
 const empty: FormState = {
   nombre: "",
-  precio_sesion_regular: 0,
-  precio_sesion_matutina: 0,
+  precio_sesion_regular: null,
+  precio_sesion_matutina: null,
   mes_inicio: null,
   anio_inicio: null,
   mes_alta: null,
@@ -87,8 +87,8 @@ export default function PacientesPage() {
   const openEdit = (p: Paciente) => {
     setForm({
       nombre: p.nombre,
-      precio_sesion_regular: p.precio_sesion_regular ?? 0,
-      precio_sesion_matutina: p.precio_sesion_matutina ?? 0,
+      precio_sesion_regular: p.precio_sesion_regular,
+      precio_sesion_matutina: p.precio_sesion_matutina,
       mes_inicio: p.mes_inicio,
       anio_inicio: p.anio_inicio,
       mes_alta: p.mes_alta,
@@ -353,12 +353,19 @@ export default function PacientesPage() {
                 <input
                   type="number"
                   min="0"
-                  value={form.precio_sesion_regular || ""}
-                  onChange={(e) => setForm({ ...form, precio_sesion_regular: Number(e.target.value) })}
-                  placeholder="0 = usar precio global"
+                  value={form.precio_sesion_regular ?? ""}
+                  onChange={(e) => setForm({
+                    ...form,
+                    precio_sesion_regular: e.target.value === "" ? null : Number(e.target.value),
+                  })}
+                  placeholder="Vacío = usar precio global de parámetros"
                   className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
                 />
-                <p className="text-xs text-stone-400 mt-1">Dejar en 0 para usar el precio global de parámetros. Este precio aplica para todos los tipos de sesión.</p>
+                <p className="text-xs text-stone-400 mt-1">
+                  <strong>Vacío</strong> = usa el precio global de Parámetros (default).{" "}
+                  <strong>0</strong> = literal $0, paciente con beca completa (no se le cobra).{" "}
+                  Cualquier otro valor = ese precio específico para este paciente.
+                </p>
               </div>
 
               <div>
