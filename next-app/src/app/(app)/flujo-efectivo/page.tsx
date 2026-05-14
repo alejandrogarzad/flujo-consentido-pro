@@ -166,10 +166,14 @@ export default function FlujoEfectivoPage() {
   }, [ANIO]);
 
   useEffect(() => {
-    const unsub = db.nomina_mensual.subscribe(() => {
-      db.nomina_mensual.list().then(setNomina);
-    });
-    return unsub;
+    const unsubs = [
+      db.nomina_mensual.subscribe(() => db.nomina_mensual.list().then(setNomina)),
+      db.gasto.subscribe(() => db.gasto.list().then(setGastos)),
+      db.pago_terapia.subscribe(() => db.pago_terapia.list().then(setPagos)),
+      db.evento.subscribe(() => db.evento.list().then(setEventos)),
+      db.subarrendamiento.subscribe(() => db.subarrendamiento.list().then(setSubarr)),
+    ];
+    return () => unsubs.forEach((u) => u());
   }, []);
 
   useEffect(() => {
