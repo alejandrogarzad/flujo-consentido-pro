@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { db } from "@/lib/db";
-import { fmtMXN, MESES, diasVacacionesLFT, paramsToObject, type ParamMap } from "@/lib/calculos";
+import { fmtMXN, MESES, diasVacacionesLFT, paramsToObject, calcularNominaDesdeNeto, type ParamMap } from "@/lib/calculos";
 import type { Empleado, NominaMensual } from "@/types/db";
+import { RefreshCw } from "lucide-react";
 
 function calcAnios(fechaIngreso: string | null): number {
   if (!fechaIngreso) return 0;
@@ -132,6 +133,42 @@ export default function NominaPage() {
     timeoutRef.current = setTimeout(() => autoguardar(empId), 500);
   };
 
+  // Recalcula los sueldos del mes filtrado leyendo sueldo_transferencia_mes
+  // y sueldo_efectivo_mes del catálogo de empleados. NO toca aguinaldo/bono.
+  const [recalculando, setRecalculando] = useState(false);
+  const recalcularDesdeCatalogo = async () => {
+    if (!confirm("¿Sobrescribir los sueldos de este mes con los del catálogo de empleados?")) return;
+    setRecalculando(true);
+    try {
+      for (const emp of empleados) {
+        const st = Number(emp.sueldo_transferencia_mes || 0);
+        const se = Number(emp.sueldo_efectivo_mes || 0);
+        const existente = nomina.find((n) => n.empleado_id === emp.id);
+        if (existente) {
+          await db.nomina_mensual.update(existente.id, {
+            sueldo_transferencia: st,
+            sueldo_efectivo: se,
+            empleado_nombre: emp.nombre,
+          });
+        } else {
+          await db.nomina_mensual.create({
+            empleado_id: emp.id,
+            empleado_nombre: emp.nombre,
+            anio, mes,
+            sueldo_transferencia: st, sueldo_efectivo: se,
+            aguinaldo: 0, vacaciones: 0, bono: 0,
+          });
+        }
+      }
+      toast.success(`Sueldos recalculados desde catálogo (${empleados.length} empleados)`);
+      await load();
+    } catch (err: any) {
+      toast.error(err?.message || "Error al recalcular");
+    } finally {
+      setRecalculando(false);
+    }
+  };
+
   const saveAll = async () => {
     setSaving(true);
     try {
@@ -173,45 +210,56 @@ export default function NominaPage() {
     }
   };
 
-  const imssRate = Number(params.imss_patronal ?? 0.30);
   const isnRate = Number(params.isn_nl ?? 0.03);
-  const isrRetenidoRate = Number(params.isr_retenido_empleados ?? 0.06);
-  const factorBrutoNeto = Number(params.factor_bruto_neto ?? 1.10);
 
   const rows = empleados.map((emp) => {
     const st = getVal(emp, "sueldo_transferencia");
     const se = getVal(emp, "sueldo_efectivo");
     const sueldoTotal = st + se;
     const aguinaldo = mes === 12 ? sueldoTotal / 30 * 15 : 0;
-    let vacaciones = 0;
+
+    // Prima vacacional: SOLO en el mes aniversario (LFT Art. 80).
+    // Prima = (salario_diario × días vac LFT) × 25%
+    let primaVac = 0;
     let diasVac = 0;
     if (emp.fecha_ingreso) {
       const fechaIngreso = new Date(emp.fecha_ingreso);
-      const mesAniversario = fechaIngreso.getMonth() + 1;
-      if (mes === mesAniversario) {
+      if (mes === fechaIngreso.getMonth() + 1) {
         const anios = calcAnios(emp.fecha_ingreso);
         if (anios >= 1) {
           diasVac = diasVacacionesLFT(anios);
-          vacaciones = Math.round(sueldoTotal / 30 * diasVac * 1.25);
+          primaVac = Math.round(sueldoTotal / 30 * diasVac * 0.25);
         }
       }
     }
+
     const bono = overrides[emp.id]?.bono ?? 0;
-    const stBruto = st * factorBrutoNeto;
-    const imss = stBruto * imssRate;
-    const isn = stBruto * isnRate;
-    const isrRetenido = stBruto * isrRetenidoRate;
-    const totalEgreso = st + se + aguinaldo + vacaciones + bono + imss + isn;
-    return { emp, st, se, sueldoTotal, aguinaldo, vacaciones, bono, imss, isn, isrRetenido, totalEgreso, diasVac };
+
+    // Deducciones patronales: gross-up del NETO transferencia (lo declarado)
+    // usando tabla LISR Art. 96 + IMSS con UMA y SBC + Infonavit 5%.
+    // El sueldo efectivo NO se declara y por tanto no genera impuestos.
+    let bruto = 0, imss = 0, isn = 0, isrRetenido = 0, infonavit = 0;
+    if (st > 0) {
+      const n = calcularNominaDesdeNeto(st, { formaPago: "Transferencia" });
+      bruto = n.bruto;
+      imss = n.imssPatronal;
+      isrRetenido = n.isrRetenido;
+      infonavit = n.infonavitPatronal;
+      isn = Math.round(bruto * isnRate);
+    }
+
+    const totalEgreso = st + se + aguinaldo + primaVac + bono + imss + isn + infonavit;
+    return { emp, st, se, sueldoTotal, aguinaldo, primaVac, bono, imss, isn, isrRetenido, infonavit, totalEgreso, diasVac, bruto };
   });
 
   const totales = rows.reduce((acc, r) => ({
     st: acc.st + r.st, se: acc.se + r.se, sueldoTotal: acc.sueldoTotal + r.sueldoTotal,
-    aguinaldo: acc.aguinaldo + r.aguinaldo, vacaciones: acc.vacaciones + r.vacaciones,
+    aguinaldo: acc.aguinaldo + r.aguinaldo, primaVac: acc.primaVac + r.primaVac,
     bono: acc.bono + r.bono,
     imss: acc.imss + r.imss, isn: acc.isn + r.isn, isrRetenido: acc.isrRetenido + r.isrRetenido,
+    infonavit: acc.infonavit + r.infonavit,
     totalEgreso: acc.totalEgreso + r.totalEgreso,
-  }), { st: 0, se: 0, sueldoTotal: 0, aguinaldo: 0, vacaciones: 0, bono: 0, imss: 0, isn: 0, isrRetenido: 0, totalEgreso: 0 });
+  }), { st: 0, se: 0, sueldoTotal: 0, aguinaldo: 0, primaVac: 0, bono: 0, imss: 0, isn: 0, isrRetenido: 0, infonavit: 0, totalEgreso: 0 });
 
   return (
     <div className="p-6 max-w-full">
@@ -224,6 +272,12 @@ export default function NominaPage() {
           </select>
           <input type="number" value={anio} onChange={(e) => setAnio(Number(e.target.value))}
             className="w-24 border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
+          <button onClick={recalcularDesdeCatalogo} disabled={recalculando || loading}
+            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-3 py-2 rounded-xl disabled:opacity-60"
+            title="Sobrescribe sueldos de este mes con los del catálogo de empleados (no toca aguinaldo/bono)">
+            <RefreshCw size={14} className={recalculando ? "animate-spin" : ""} />
+            {recalculando ? "Recalculando..." : "Recalcular sueldos"}
+          </button>
           <button onClick={saveAll} disabled={saving}
             className="bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-60">
             {saving ? "Guardando..." : "Guardar Nómina"}
@@ -233,7 +287,12 @@ export default function NominaPage() {
 
       <div className="mb-3 text-xs text-stone-400 bg-amber-50 border border-amber-100 rounded-lg px-4 py-2 space-y-0.5">
         <p>Los valores de sueldo están prellenados desde el catálogo de empleados. Puedes modificarlos aquí si hay variación en el mes.</p>
-        <p>Impuestos (IMSS {(imssRate * 100).toFixed(0)}%, ISN {(isnRate * 100).toFixed(0)}%, ISR ret. {(isrRetenidoRate * 100).toFixed(0)}%) se calculan sobre Sueldo Transf. × Factor Bruto/Neto ({factorBrutoNeto.toFixed(2)}).</p>
+        <p>
+          <strong>IMSS Patronal, ISR Retenido, Infonavit</strong> se calculan con gross-up oficial:
+          tabla LISR Art. 96 mensual + IMSS por SBC (UMA {(118.50).toFixed(2)}) + Infonavit 5% del SBC mensual.
+          <strong> ISN</strong> = bruto × {(isnRate * 100).toFixed(0)}%.
+          <strong> Prima Vac.</strong> = (sueldo/30) × días vac. LFT × 25%, solo en el mes aniversario del empleado.
+        </p>
       </div>
 
       <div className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
@@ -247,20 +306,21 @@ export default function NominaPage() {
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Total Sueldo</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Aguinaldo</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Bono <span className="text-stone-300 font-normal">(efvo.)</span></th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Vac+Prima/mes</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Prima Vac.</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">IMSS Pat.</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">ISN</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">ISR Ret.</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Infonavit</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Total Egreso</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={11} className="px-4 py-8 text-center text-stone-400">Cargando...</td></tr>
+                <tr><td colSpan={12} className="px-4 py-8 text-center text-stone-400">Cargando...</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={11} className="px-4 py-8 text-center text-stone-400">Sin empleados activos</td></tr>
+                <tr><td colSpan={12} className="px-4 py-8 text-center text-stone-400">Sin empleados activos</td></tr>
               ) : (
-                rows.map(({ emp, st, se, sueldoTotal, aguinaldo, vacaciones, imss, isn, isrRetenido, totalEgreso }) => (
+                rows.map(({ emp, st, se, sueldoTotal, aguinaldo, primaVac, imss, isn, isrRetenido, infonavit, totalEgreso, diasVac }) => (
                   <tr key={emp.id} className="border-t border-stone-50 hover:bg-stone-50/50">
                     <td className="px-4 py-3">
                       <p className="font-medium text-stone-800">{emp.nombre}</p>
@@ -283,10 +343,13 @@ export default function NominaPage() {
                         onChange={(e) => setVal(emp.id, "bono", e.target.value)}
                         className="w-28 border border-stone-200 rounded-lg px-2 py-1 text-xs text-right focus:outline-none focus:ring-2 focus:ring-violet-200" />
                     </td>
-                    <td className="px-4 py-3 text-right text-stone-600">{fmtMXN(vacaciones)}</td>
+                    <td className="px-4 py-3 text-right text-stone-600" title={diasVac > 0 ? `${diasVac} días vac. × 25%` : undefined}>
+                      {primaVac > 0 ? fmtMXN(primaVac) : "—"}
+                    </td>
                     <td className="px-4 py-3 text-right text-amber-600">{fmtMXN(imss)}</td>
                     <td className="px-4 py-3 text-right text-amber-600">{fmtMXN(isn)}</td>
                     <td className="px-4 py-3 text-right text-stone-500">{fmtMXN(isrRetenido)}</td>
+                    <td className="px-4 py-3 text-right text-stone-500">{fmtMXN(infonavit)}</td>
                     <td className="px-4 py-3 text-right font-bold text-stone-800">{fmtMXN(totalEgreso)}</td>
                   </tr>
                 ))
@@ -301,10 +364,11 @@ export default function NominaPage() {
                   <td className="px-4 py-3 text-right font-bold text-stone-700">{fmtMXN(totales.sueldoTotal)}</td>
                   <td className="px-4 py-3 text-right font-bold text-stone-700">{mes === 12 ? fmtMXN(totales.aguinaldo) : "—"}</td>
                   <td className="px-4 py-3 text-right font-bold text-stone-700">{fmtMXN(totales.bono)}</td>
-                  <td className="px-4 py-3 text-right font-bold text-stone-700">{fmtMXN(totales.vacaciones)}</td>
+                  <td className="px-4 py-3 text-right font-bold text-stone-700">{fmtMXN(totales.primaVac)}</td>
                   <td className="px-4 py-3 text-right font-bold text-amber-600">{fmtMXN(totales.imss)}</td>
                   <td className="px-4 py-3 text-right font-bold text-amber-600">{fmtMXN(totales.isn)}</td>
                   <td className="px-4 py-3 text-right font-bold text-stone-500">{fmtMXN(totales.isrRetenido)}</td>
+                  <td className="px-4 py-3 text-right font-bold text-stone-500">{fmtMXN(totales.infonavit)}</td>
                   <td className="px-4 py-3 text-right font-bold text-stone-800">{fmtMXN(totales.totalEgreso)}</td>
                 </tr>
               </tfoot>

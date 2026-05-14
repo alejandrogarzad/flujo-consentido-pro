@@ -112,23 +112,42 @@ export default function EmpleadosPage() {
       };
       if (editing) {
         await db.empleado.update(editing, data);
-        const nomDic = await db.nomina_mensual.filter({ mes: 12, anio: anioActual, empleado_id: editing });
-        if (nomDic.length > 0) {
-          await db.nomina_mensual.update(nomDic[0].id, { bono: Number(bonoEdit) });
+
+        const st = Number(form.sueldo_transferencia_mes || 0);
+        const se = Number(form.sueldo_efectivo_mes || 0);
+
+        // Sync sueldos al mes en curso + futuros pendientes del año actual
+        const now = new Date();
+        const valActual = now.getFullYear() * 100 + (now.getMonth() + 1);
+        const todasNom = await db.nomina_mensual.filter({ empleado_id: editing, anio: anioActual });
+        const aSyncear = todasNom.filter((n) => (n.anio * 100 + n.mes) >= valActual);
+        for (const n of aSyncear) {
+          await db.nomina_mensual.update(n.id, {
+            sueldo_transferencia: st,
+            sueldo_efectivo: se,
+            empleado_nombre: form.nombre,
+          });
+        }
+
+        // Bono de diciembre (lógica existente)
+        const nomDic = aSyncear.find((n) => n.mes === 12)
+          ?? (await db.nomina_mensual.filter({ mes: 12, anio: anioActual, empleado_id: editing }))[0];
+        if (nomDic) {
+          await db.nomina_mensual.update(nomDic.id, { bono: Number(bonoEdit) });
         } else {
           await db.nomina_mensual.create({
             empleado_id: editing,
             empleado_nombre: form.nombre,
             anio: anioActual,
             mes: 12,
-            sueldo_transferencia: Number(form.sueldo_transferencia_mes || 0),
-            sueldo_efectivo: Number(form.sueldo_efectivo_mes || 0),
+            sueldo_transferencia: st,
+            sueldo_efectivo: se,
             aguinaldo: 0,
             vacaciones: 0,
             bono: Number(bonoEdit),
           });
         }
-        toast.success("Empleado actualizado");
+        toast.success(`Empleado actualizado · sync ${aSyncear.length} nómina(s) ${aSyncear.length > 0 ? "del mes corriente y futuros" : ""}`);
       } else {
         await db.empleado.create(data);
         toast.success("Empleado creado");
