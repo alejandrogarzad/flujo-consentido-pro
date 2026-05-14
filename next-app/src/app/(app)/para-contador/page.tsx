@@ -3,7 +3,7 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
 import { db } from "@/lib/db";
-import { fmtMXN, paramsToObject, MESES, type ParamMap } from "@/lib/calculos";
+import { fmtMXN, paramsToObject, MESES, parseFechaLocal, type ParamMap } from "@/lib/calculos";
 import type { Evento, FormaPago, PagoTerapia, Subarrendamiento } from "@/types/db";
 
 const FORMAS_FACTURABLES: FormaPago[] = ["Transferencia", "Tarjeta", "Depósito"];
@@ -80,7 +80,7 @@ export default function ParaContadorPage() {
   const totalTerapiasEfv = terapiasEfectivo.reduce((s, r) => s + r.total, 0);
 
   const eventosMes = eventos.filter((ev) => {
-    const d = new Date(ev.fecha);
+    const d = (parseFechaLocal(ev.fecha) ?? new Date(0));
     return d.getMonth() + 1 === mes && d.getFullYear() === anio;
   });
   const eventosFacturables = eventosMes.filter((ev) => esFacturable(ev.forma_pago));

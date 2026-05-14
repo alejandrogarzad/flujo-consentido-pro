@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { db } from "@/lib/db";
-import { fmtMXN, calcularISR, paramsToObject, MESES, type ParamMap } from "@/lib/calculos";
+import { fmtMXN, calcularISR, paramsToObject, MESES, parseFechaLocal, type ParamMap } from "@/lib/calculos";
 import type { Evento, Gasto, NominaMensual, PagoTerapia, Subarrendamiento } from "@/types/db";
 
 interface OverrideState { ivaPagar?: number; isr?: number }
@@ -58,7 +58,7 @@ export default function ImpuestosPage() {
     const ivaTrasTerapias = pagosMes.filter((p) => p.forma_pago !== "Efectivo")
       .reduce((sum, p) => sum + Number(p.monto_pagado || 0) * ivaRate / (1 + ivaRate), 0);
 
-    const eventosMes = eventos.filter((ev) => new Date(ev.fecha).getMonth() + 1 === mes);
+    const eventosMes = eventos.filter((ev) => (parseFechaLocal(ev.fecha) ?? new Date(0)).getMonth() + 1 === mes);
     const ivaTrasEventos = eventosMes.filter((ev) => ev.forma_pago !== "Efectivo")
       .reduce((sum, ev) => sum + Number(ev.precio_base || 0) * ivaRate, 0);
 
@@ -68,7 +68,7 @@ export default function ImpuestosPage() {
 
     const ivaTrasladadoTotal = ivaTrasTerapias + ivaTrasEventos + ivaSubarr;
 
-    const gastosMes = gastos.filter((g) => new Date(g.fecha).getMonth() + 1 === mes);
+    const gastosMes = gastos.filter((g) => (parseFechaLocal(g.fecha) ?? new Date(0)).getMonth() + 1 === mes);
     const ivaAcreditable = gastosMes.filter((g) => g.con_factura)
       .reduce((sum, g) => sum + Number(g.monto || 0) * ivaRate, 0);
 

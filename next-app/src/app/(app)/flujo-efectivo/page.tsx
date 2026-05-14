@@ -5,7 +5,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { toast } from "sonner";
 import { db } from "@/lib/db";
 import {
-  fmtMXN, paramsToObject, MESES, TARIFA_ISR, diasVacacionesLFT,
+  fmtMXN, paramsToObject, MESES, TARIFA_ISR, diasVacacionesLFT, parseFechaLocal,
   type ParamMap,
 } from "@/lib/calculos";
 import type { Empleado, Evento, FormaPago, Gasto, NominaMensual, PagoTerapia, Subarrendamiento } from "@/types/db";
@@ -239,9 +239,9 @@ export default function FlujoEfectivoPage() {
   let sumSueldos = 0; let sumAguinaldo = 0; let sumBono = 0;
   for (let i = 1; i <= mesesCompletos; i++) {
     sumTer += pagos.filter((p) => p.mes === i && p.anio === ANIO).reduce((s, p) => s + Number(p.monto_pagado || 0), 0);
-    sumCit += eventos.filter((ev) => { const d = new Date(ev.fecha); return d.getMonth() + 1 === i && d.getFullYear() === ANIO; }).reduce((s, ev) => s + Number(ev.monto_pagado || 0), 0);
+    sumCit += eventos.filter((ev) => { const d = (parseFechaLocal(ev.fecha) ?? new Date(0)); return d.getMonth() + 1 === i && d.getFullYear() === ANIO; }).reduce((s, ev) => s + Number(ev.monto_pagado || 0), 0);
     sumSub += subarr.filter((s) => s.mes === i && s.anio === ANIO).reduce((acc, x) => acc + Number(x.monto_cobrado || 0), 0);
-    sumGastos += gastos.filter((g) => { const d = new Date(g.fecha); return d.getMonth() + 1 === i && d.getFullYear() === ANIO; }).reduce((s, g) => s + Number(g.monto || 0), 0);
+    sumGastos += gastos.filter((g) => { const d = (parseFechaLocal(g.fecha) ?? new Date(0)); return d.getMonth() + 1 === i && d.getFullYear() === ANIO; }).reduce((s, g) => s + Number(g.monto || 0), 0);
     nomina.filter((nm) => nm.mes === i && nm.anio === ANIO).forEach((nm) => {
       sumSueldos += Number(nm.sueldo_transferencia || 0) + Number(nm.sueldo_efectivo || 0);
       sumAguinaldo += Number(nm.aguinaldo || 0);
@@ -260,7 +260,7 @@ export default function FlujoEfectivoPage() {
       const pagoConIVA = pagos.filter((p) => p.mes === m && p.anio === ANIO && CON_IVA_FORMAS.includes(p.forma_pago))
         .reduce((s, p) => s + Number(p.monto_pagado || 0), 0);
       const eventosConIVA = eventos.filter((ev) => {
-        const d = new Date(ev.fecha);
+        const d = (parseFechaLocal(ev.fecha) ?? new Date(0));
         return d.getMonth() + 1 === m && d.getFullYear() === ANIO && CON_IVA_FORMAS.includes(ev.forma_pago);
       }).reduce((s, ev) => s + Number(ev.monto_pagado || 0), 0);
       const ivaM = Math.round((pagoConIVA + eventosConIVA) * Number(params.iva ?? 0.16));
@@ -274,7 +274,7 @@ export default function FlujoEfectivoPage() {
     const esProyeccion = mes > mesActual;
 
     let ingresosTerapias = pagos.filter((p) => p.mes === mes && p.anio === ANIO).reduce((sum, p) => sum + Number(p.monto_pagado || 0), 0);
-    let ingresosCitas = eventos.filter((ev) => { const d = new Date(ev.fecha); return d.getMonth() + 1 === mes && d.getFullYear() === ANIO; }).reduce((sum, ev) => sum + Number(ev.monto_pagado || 0), 0);
+    let ingresosCitas = eventos.filter((ev) => { const d = (parseFechaLocal(ev.fecha) ?? new Date(0)); return d.getMonth() + 1 === mes && d.getFullYear() === ANIO; }).reduce((sum, ev) => sum + Number(ev.monto_pagado || 0), 0);
     let ingresosSubarr = subarr.filter((s) => s.mes === mes && s.anio === ANIO).reduce((sum, s) => sum + Number(s.monto_cobrado || 0), 0);
 
     if (esProyeccion) {
@@ -304,7 +304,7 @@ export default function FlujoEfectivoPage() {
       const pagoConIVA = pagos.filter((p) => p.mes === mes && p.anio === ANIO && CON_IVA_FORMAS.includes(p.forma_pago))
         .reduce((s, p) => s + Number(p.monto_pagado || 0), 0);
       const eventosConIVA = eventos.filter((ev) => {
-        const d = new Date(ev.fecha);
+        const d = (parseFechaLocal(ev.fecha) ?? new Date(0));
         return d.getMonth() + 1 === mes && d.getFullYear() === ANIO && CON_IVA_FORMAS.includes(ev.forma_pago);
       }).reduce((s, ev) => s + Number(ev.monto_pagado || 0), 0);
       ivaCalculado = Math.round((pagoConIVA + eventosConIVA) * ivaRate);
@@ -355,7 +355,7 @@ export default function FlujoEfectivoPage() {
     const isnCalculado = Math.round(stTotalBruto * isnRate);
     const isnReal = getOverride("isn", isnCalculado);
 
-    let egresosGastos = gastos.filter((g) => { const d = new Date(g.fecha); return d.getMonth() + 1 === mes && d.getFullYear() === ANIO; }).reduce((sum, g) => sum + Number(g.monto || 0), 0);
+    let egresosGastos = gastos.filter((g) => { const d = (parseFechaLocal(g.fecha) ?? new Date(0)); return d.getMonth() + 1 === mes && d.getFullYear() === ANIO; }).reduce((sum, g) => sum + Number(g.monto || 0), 0);
     if (esProyeccion) egresosGastos = prom.gastos;
 
     let egresosSueldos = 0; let egresosPrima = 0; let egresosAguinaldo = 0; let egresosBono = 0; let egresosIMSSNomina = 0; let egresosISN = 0;

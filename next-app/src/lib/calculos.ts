@@ -238,6 +238,19 @@ export function pacienteAplicaEnMes(
   return true;
 }
 
+// ---------- Date helpers -----------------------------------------------------
+
+// JavaScript parsea las strings "YYYY-MM-DD" como UTC midnight. En zonas
+// horarias negativas (México UTC-6) eso se convierte a la fecha anterior en
+// local time — un gasto del 1 de mayo termina contándose en abril.
+// Esta función parsea la fecha como LOCAL time para evitar ese corrimiento.
+export function parseFechaLocal(fecha: string | null | undefined): Date | null {
+  if (!fecha || typeof fecha !== "string") return null;
+  const m = fecha.substring(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+
 // ---------- Format helpers ---------------------------------------------------
 
 export function fmtMXN(n: number | null | undefined): string {

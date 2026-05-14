@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, X, Edit2, Trash2, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { db, type AuthUser } from "@/lib/db";
-import { fmtMXN, MESES } from "@/lib/calculos";
+import { fmtMXN, MESES, parseFechaLocal } from "@/lib/calculos";
 import type { CategoriaGasto, FormaPago, Gasto } from "@/types/db";
 
 const CATEGORIAS_FILTER = ["Todas", "Renta", "Materiales Centro", "Materiales Limpieza", "Comidas", "Servicios", "Renta Terapeutas", "Capacitaciones", "Nómina", "Impuestos", "Otros"] as const;
@@ -120,7 +120,7 @@ export default function GastosPage() {
 
   const filtered = gastos.filter((g) => {
     const catOk = filtroCat === "Todas" || g.categoria === filtroCat;
-    const mesOk = filtroMes === 0 || new Date(g.fecha).getMonth() + 1 === filtroMes;
+    const mesOk = filtroMes === 0 || (parseFechaLocal(g.fecha) ?? new Date(0)).getMonth() + 1 === filtroMes;
     return catOk && mesOk;
   });
   const totalFiltrado = filtered.reduce((s, g) => s + Number(g.monto || 0), 0);

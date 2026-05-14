@@ -5,7 +5,7 @@ import { TrendingUp, TrendingDown, DollarSign, Wallet } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from "recharts";
 import { toast } from "sonner";
 import { db } from "@/lib/db";
-import { fmtMXN, paramsToObject, MESES, type ParamMap } from "@/lib/calculos";
+import { fmtMXN, paramsToObject, MESES, parseFechaLocal, type ParamMap } from "@/lib/calculos";
 import type { Evento, Gasto, NominaMensual, PagoTerapia, SesionMensual, Subarrendamiento } from "@/types/db";
 
 export default function DashboardPage() {
@@ -59,7 +59,7 @@ export default function DashboardPage() {
   });
   eventos.forEach((ev) => {
     if (ev.monto_pagado) {
-      const d = new Date(ev.fecha);
+      const d = (parseFechaLocal(ev.fecha) ?? new Date(0));
       if (d.getFullYear() === anioContable) ingresosPorMes[d.getMonth()] += Number(ev.monto_pagado);
     }
   });
@@ -74,7 +74,7 @@ export default function DashboardPage() {
   const isnRate = Number(params.isn_nl ?? 0.03);
 
   gastos.forEach((g) => {
-    const d = new Date(g.fecha);
+    const d = (parseFechaLocal(g.fecha) ?? new Date(0));
     if (d.getFullYear() === anioContable) egresosPorMes[d.getMonth()] += Number(g.monto || 0);
   });
   nomina.forEach((n) => {
