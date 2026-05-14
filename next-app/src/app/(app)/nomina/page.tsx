@@ -97,16 +97,13 @@ export default function NominaPage() {
     const se = getVal(emp, "sueldo_efectivo");
     const sueldoTotal = st + se;
     const aguinaldo = mes === 12 ? sueldoTotal / 30 * 15 : 0;
+    // Prima vacacional: provisión mensual (prima_anual / 12)
     let vacaciones = 0;
-    if (emp.fecha_ingreso) {
-      const fechaIngreso = new Date(emp.fecha_ingreso);
-      const mesAniversario = fechaIngreso.getMonth() + 1;
-      if (mes === mesAniversario) {
-        const anios = calcAnios(emp.fecha_ingreso);
-        if (anios >= 1) {
-          const diasVac = diasVacacionesLFT(anios);
-          vacaciones = Math.round(sueldoTotal / 30 * diasVac * 0.25);
-        }
+    if (emp.fecha_ingreso && sueldoTotal > 0) {
+      const anios = calcAnios(emp.fecha_ingreso);
+      if (anios >= 1) {
+        const diasVac = diasVacacionesLFT(anios);
+        vacaciones = Math.round(((sueldoTotal / 30) * diasVac * 0.25) / 12);
       }
     }
     const bono = overrides[empId]?.bono ?? 0;
@@ -177,16 +174,13 @@ export default function NominaPage() {
         const se = getVal(emp, "sueldo_efectivo");
         const sueldoTotal = st + se;
         const aguinaldo = mes === 12 ? sueldoTotal / 30 * 15 : 0;
+        // Prima vacacional: provisión mensual (prima_anual / 12)
         let vacaciones = 0;
-        if (emp.fecha_ingreso) {
-          const fechaIngreso = new Date(emp.fecha_ingreso);
-          const mesAniversario = fechaIngreso.getMonth() + 1;
-          if (mes === mesAniversario) {
-            const anios = calcAnios(emp.fecha_ingreso);
-            if (anios >= 1) {
-              const diasVac = diasVacacionesLFT(anios);
-              vacaciones = Math.round(sueldoTotal / 30 * diasVac * 0.25);
-            }
+        if (emp.fecha_ingreso && sueldoTotal > 0) {
+          const anios = calcAnios(emp.fecha_ingreso);
+          if (anios >= 1) {
+            const diasVac = diasVacacionesLFT(anios);
+            vacaciones = Math.round(((sueldoTotal / 30) * diasVac * 0.25) / 12);
           }
         }
         const bono = overrides[emp.id]?.bono ?? 0;
@@ -218,18 +212,18 @@ export default function NominaPage() {
     const sueldoTotal = st + se;
     const aguinaldo = mes === 12 ? sueldoTotal / 30 * 15 : 0;
 
-    // Prima vacacional: SOLO en el mes aniversario (LFT Art. 80).
-    // Prima = (salario_diario × días vac LFT) × 25%
+    // Prima vacacional: provisión MENSUAL = prima_anual / 12.
+    // Prima anual = (salario_diario × días vac LFT) × 25% (LFT Art. 80).
+    // Se prorratea cada mes para reflejar el costo mensual aunque se pague
+    // efectivamente en el mes aniversario.
     let primaVac = 0;
     let diasVac = 0;
-    if (emp.fecha_ingreso) {
-      const fechaIngreso = new Date(emp.fecha_ingreso);
-      if (mes === fechaIngreso.getMonth() + 1) {
-        const anios = calcAnios(emp.fecha_ingreso);
-        if (anios >= 1) {
-          diasVac = diasVacacionesLFT(anios);
-          primaVac = Math.round(sueldoTotal / 30 * diasVac * 0.25);
-        }
+    if (emp.fecha_ingreso && sueldoTotal > 0) {
+      const anios = calcAnios(emp.fecha_ingreso);
+      if (anios >= 1) {
+        diasVac = diasVacacionesLFT(anios);
+        const primaAnual = (sueldoTotal / 30) * diasVac * 0.25;
+        primaVac = Math.round(primaAnual / 12);
       }
     }
 
@@ -291,7 +285,7 @@ export default function NominaPage() {
           <strong>IMSS Patronal, ISR Retenido, Infonavit</strong> se calculan con gross-up oficial:
           tabla LISR Art. 96 mensual + IMSS por SBC (UMA {(118.50).toFixed(2)}) + Infonavit 5% del SBC mensual.
           <strong> ISN</strong> = bruto × {(isnRate * 100).toFixed(0)}%.
-          <strong> Prima Vac.</strong> = (sueldo/30) × días vac. LFT × 25%, solo en el mes aniversario del empleado.
+          <strong> Prima Vac.</strong> = provisión mensual = (prima_anual / 12), donde prima_anual = (sueldo/30) × días vac. LFT × 25%.
         </p>
       </div>
 
