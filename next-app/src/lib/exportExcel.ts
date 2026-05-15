@@ -796,7 +796,23 @@ function pestCobranzaMensual(
 }
 
 // ============================================================================
-// PESTAÑA: Cobranza Detallada (Paciente × Mes × {Forma, Subtotal, IVA, Total})
+// PESTAÑA: Cobranza Detallada (Paciente × Mes × 8 sub-cols)
+//
+// REPLICA EXACTA del archivo "Consentido Analisis Datos 2026.xlsx":
+//   - Col A vacía (decorativa)
+//   - Col B número secuencial
+//   - Col C nombre paciente (amarillo pastel)
+//   - Col D gap
+//   - Por cada mes (8 cols): Efvo | Ter | %beca | Horas | Precio/Hr | Ingreso | Pagado | Saldo
+//   - 1 columna de gap entre meses
+//
+// Paleta exacta del archivo de referencia:
+//   - Amarillo pastel:  {theme:7,  tint:0.8}  → editable
+//   - Verde pastel:     {theme:9,  tint:0.8}  → header de mes
+//   - Azul oscuro:      {theme:8,  tint:-0.25} → texto del título
+//   - Celdas calculadas: SIN fill, SIN border (transparentes)
+//   - Borders thin solo en celdas amarillas
+//   - Format contable mexicano sin signo $
 // ============================================================================
 
 function pestCobranzaDetallada(
@@ -807,93 +823,113 @@ function pestCobranzaDetallada(
   pagos: PagoTerapia[],
   paramsMap: ParamMap,
 ) {
-  // Formato basado en "Consentido Analisis Datos 2026.xlsx":
-  // 1 fila por paciente; 8 sub-cols por mes:
-  //   Forma | %Beca | Sesiones | Precio | Subtotal | IVA | Pagado | Saldo
-  const ws = wb.addWorksheet("Cobranza Detallada", { properties: { tabColor: { argb: "FF22C55E" } } });
-  const MESES_LARGO = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
-  const SUB_COLS = ["Forma", "% Beca", "Sesiones", "Precio", "Subtotal", "IVA", "Pagado", "Saldo"];
+  const ws = wb.addWorksheet("Cobranza Detallada", { properties: { tabColor: { argb: "FFFFC000" } } });
+
+  // ----- Paleta exacta del archivo de referencia -----
+  // Amarillo pastel (datos editables, nombre paciente, parámetros)
+  // ExcelJS soporta {theme, tint} en runtime pero su tipo Color no lo declara.
+  const FILL_AMA = { type: "pattern", pattern: "solid", fgColor: { theme: 7, tint: 0.7999816888943144 } } as unknown as ExcelJS.Fill;
+  // Verde pastel (headers de mes)
+  const FILL_VRD = { type: "pattern", pattern: "solid", fgColor: { theme: 9, tint: 0.7999816888943144 } } as unknown as ExcelJS.Fill;
+  // Azul oscuro (texto de títulos)
+  const FONT_AZUL = { theme: 8, tint: -0.249977111117893 } as unknown as ExcelJS.Color;
+  // Format contable mexicano sin signo $ (como el archivo de referencia)
+  const FMT_REF = '_-* #,##0.00_-;-* #,##0.00_-;_-* "-"??_-;_-@_-';
+  const BORDER_THIN = { style: "thin" as const };
+  const BORDER_ALL = { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN };
+
+  // ----- Layout: 4 cols iniciales + 12 meses × (8 sub-cols + 1 gap) -----
+  //   A: vacía (decorativa, width pequeño)
+  //   B: número secuencial
+  //   C: nombre paciente
+  //   D: gap
+  //   E-L: mes 1 (8 cols: Efvo, Ter, %beca, Horas, Precio/Hr, Ingreso, Pagado, Saldo)
+  //   M: gap entre meses
+  //   N-U: mes 2
+  //   ...
+  const SUB_COLS = ["Efvo.", "Ter.", "% beca", "Horas", "Precio/Hr", "Ingreso", "Pagado", "Saldo"];
   const N_SUB = SUB_COLS.length;
+  const MESES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 
-  // Título
-  const totalCols = 1 + 12 * N_SUB + 1; // Paciente + 12 × 8 + Total Año
-  // Título principal
-  ws.mergeCells(1, 1, 1, totalCols);
-  const titulo = ws.getCell(1, 1);
-  titulo.value = `Cobranza ${anio}`;
-  titulo.font = { bold: true, size: 16, color: { argb: "FF000000" } };
-  titulo.alignment = { horizontal: "center", vertical: "middle" };
-  ws.getRow(1).height = 28;
+  // Devuelve la columna inicial del mes m (0..11). Mes 0 empieza en col 5 (E).
+  // Cada mes ocupa 8 cols + 1 gap.
+  const mesStartCol = (m: number) => 5 + m * (N_SUB + 1);
+  const totalCols = mesStartCol(11) + N_SUB + 1; // última col: Total Año (con gap previo)
 
-  // Sub-título sutil
-  ws.mergeCells(2, 1, 2, totalCols);
-  const subtitulo = ws.getCell(2, 1);
-  subtitulo.value = "Una fila por paciente · 8 columnas por mes · Edita Forma, %Beca, Sesiones, Precio o Pagado y todo recalcula";
-  subtitulo.font = { italic: true, size: 10, color: { argb: "FF7F7F7F" } };
-  subtitulo.alignment = { horizontal: "center", vertical: "middle" };
-  ws.getRow(2).height = 18;
+  // ----- Fila 1: Título -----
+  const tit = ws.getCell(1, 1);
+  tit.value = `Cobranza ${anio}`;
+  tit.font = { bold: true, size: 14, color: FONT_AZUL, name: "Arial" };
+  tit.alignment = { vertical: "middle" };
+  ws.getRow(1).height = 22;
 
-  // Header nivel 1 (mes merged) — fondo amarillo pastel, texto negro
-  ws.mergeCells(3, 1, 4, 1);
-  const pacHdr = ws.getCell(3, 1);
-  pacHdr.value = "Paciente";
-  pacHdr.font = { bold: true, color: { argb: "FF000000" }, size: 12 };
-  pacHdr.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_MES_HEADER } };
-  pacHdr.alignment = { horizontal: "center", vertical: "middle" };
-  pacHdr.border = {
-    top: { style: "medium", color: { argb: COLOR_BORDE } },
-    bottom: { style: "medium", color: { argb: COLOR_BORDE } },
-    left: { style: "medium", color: { argb: COLOR_BORDE } },
-    right: { style: "thin", color: { argb: COLOR_BORDE } },
-  };
+  // ----- Filas 3-4: parámetros editables por mes (Aumento %, Precio/Hr) -----
+  // En el archivo de referencia hay un Crecimiento/Aumento y un Precio/Hr arriba
+  // de cada mes para escenarios "qué pasa si...". Lo replicamos con un solo
+  // global (apunta a Parámetros) para mantener simpleza.
+  const lblAumento = ws.getCell(3, 4);
+  lblAumento.value = "Aumento:";
+  lblAumento.font = { size: 11, color: { theme: 1 }, name: "Calibri" };
+  const valAumento = ws.getCell(3, 5);
+  valAumento.value = 0;
+  valAumento.numFmt = "0%";
+  valAumento.font = { bold: true, size: 11, color: { theme: 1 }, name: "Calibri" };
+  valAumento.alignment = { horizontal: "center" };
+  valAumento.fill = FILL_AMA;
+  valAumento.border = BORDER_ALL;
 
+  const lblPrecio = ws.getCell(4, 4);
+  lblPrecio.value = "Precio/Hr:";
+  lblPrecio.font = { size: 11, color: { theme: 1 }, name: "Calibri" };
+  const valPrecio = ws.getCell(4, 5);
+  valPrecio.value = { formula: "PRECIO_REG" };
+  valPrecio.numFmt = FMT_REF;
+  valPrecio.font = { size: 11, color: { theme: 1 }, name: "Calibri" };
+
+  // ----- Fila 5: header de mes (merged 8 cols, fondo verde pastel) -----
   for (let m = 0; m < 12; m++) {
-    const startCol = 2 + m * N_SUB;
-    ws.mergeCells(3, startCol, 3, startCol + N_SUB - 1);
-    const mesCell = ws.getCell(3, startCol);
-    mesCell.value = MESES_LARGO[m];
-    mesCell.font = { bold: true, color: { argb: "FF000000" }, size: 12 };
-    mesCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_MES_HEADER } };
-    mesCell.alignment = { horizontal: "center", vertical: "middle" };
-    mesCell.border = {
-      top: { style: "medium", color: { argb: COLOR_BORDE } },
-      bottom: { style: "thin", color: { argb: COLOR_BORDE_LIGHT } },
-      left: { style: "medium", color: { argb: COLOR_BORDE } },
-      right: { style: "medium", color: { argb: COLOR_BORDE } },
-    };
+    const c0 = mesStartCol(m);
+    ws.mergeCells(5, c0, 5, c0 + N_SUB - 1);
+    const hd = ws.getCell(5, c0);
+    hd.value = MESES[m];
+    hd.font = { bold: true, size: 11, color: { theme: 1 }, name: "Calibri" };
+    hd.fill = FILL_VRD;
+    hd.alignment = { horizontal: "center", vertical: "middle" };
+    hd.border = BORDER_ALL;
+    // Aplicar fill/border también a las celdas internas del merge para Excel render
+    for (let cc = c0 + 1; cc <= c0 + N_SUB - 1; cc++) {
+      const sub = ws.getCell(5, cc);
+      sub.fill = FILL_VRD;
+      sub.border = BORDER_ALL;
+    }
+  }
+  // Header "Total Año" al final
+  const cTot0 = mesStartCol(11) + N_SUB + 1;
+  const hdTot = ws.getCell(5, cTot0);
+  hdTot.value = "Total Año";
+  hdTot.font = { bold: true, size: 11, color: { theme: 1 }, name: "Calibri" };
+  hdTot.fill = FILL_VRD;
+  hdTot.alignment = { horizontal: "center", vertical: "middle" };
+  hdTot.border = BORDER_ALL;
 
-    SUB_COLS.forEach((s, i) => {
-      const sc = ws.getCell(4, startCol + i);
-      sc.value = s;
-      sc.font = { bold: true, color: { argb: "FF000000" }, size: 10 };
-      sc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_MES_HEADER } };
-      sc.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-      sc.border = {
-        top: { style: "thin", color: { argb: COLOR_BORDE_LIGHT } },
-        bottom: { style: "medium", color: { argb: COLOR_BORDE } },
-        left: i === 0 ? { style: "medium", color: { argb: COLOR_BORDE } } : { style: "hair", color: { argb: COLOR_BORDE_LIGHT } },
-        right: i === N_SUB - 1 ? { style: "medium", color: { argb: COLOR_BORDE } } : { style: "hair", color: { argb: COLOR_BORDE_LIGHT } },
-      };
+  // ----- Fila 6: sub-headers (sin fill, bold) -----
+  for (let m = 0; m < 12; m++) {
+    const c0 = mesStartCol(m);
+    SUB_COLS.forEach((label, i) => {
+      const sh = ws.getCell(6, c0 + i);
+      sh.value = label;
+      sh.font = { bold: true, size: 11, color: { theme: 1 }, name: "Calibri" };
+      sh.alignment = { horizontal: "left" };
+      if (i === 4 || i === 5 || i === 6) sh.numFmt = FMT_REF; // los headers de Precio/Ingreso/Pagado heredan numFmt en el archivo original
     });
   }
+  // sub-header bajo "Total Año"
+  const shTot = ws.getCell(6, cTot0);
+  shTot.value = "Pagado";
+  shTot.font = { bold: true, size: 11, color: { theme: 1 }, name: "Calibri" };
+  shTot.alignment = { horizontal: "left" };
 
-  ws.mergeCells(3, totalCols, 4, totalCols);
-  const totHdr = ws.getCell(3, totalCols);
-  totHdr.value = "Total Año\nPagado";
-  totHdr.font = { bold: true, color: { argb: "FF000000" }, size: 11 };
-  totHdr.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_TOTAL } };
-  totHdr.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-  totHdr.border = {
-    top: { style: "medium", color: { argb: COLOR_BORDE } },
-    bottom: { style: "medium", color: { argb: COLOR_BORDE } },
-    left: { style: "medium", color: { argb: COLOR_BORDE } },
-    right: { style: "medium", color: { argb: COLOR_BORDE } },
-  };
-
-  ws.getRow(3).height = 24;
-  ws.getRow(4).height = 32;
-
-  // Mapas de datos (paciente_id, mes) → ses y pago
+  // ----- Datos -----
   const sesionesDedup = dedupSesiones(sesiones.filter((s) => s.anio === anio));
   const sesMap = new Map<string, SesionMensual>();
   sesionesDedup.forEach((s) => sesMap.set(`${s.paciente_id}|${s.mes}`, s));
@@ -923,203 +959,192 @@ function pestCobranzaDetallada(
     return false;
   });
 
-  // Bordes reutilizables para celdas de datos
-  const borderThin = { style: "thin" as const, color: { argb: COLOR_BORDE_LIGHT } };
-  const borderMed = { style: "medium" as const, color: { argb: COLOR_BORDE } };
-
   pacActivos.forEach((p, pi) => {
-    const r = 5 + pi;
-    // Cell del nombre del paciente — fondo amarillo pastel como en el archivo de referencia
-    const cNom = ws.getCell(r, 1);
+    const r = 7 + pi;
+
+    // Col B: número secuencial
+    const cNum = ws.getCell(r, 2);
+    cNum.value = pi + 1;
+    cNum.font = { size: 11, color: { theme: 1 }, name: "Arial" };
+    cNum.alignment = { horizontal: "center" };
+
+    // Col C: nombre del paciente (fondo amarillo, font 12 Calibri)
+    const cNom = ws.getCell(r, 3);
     cNom.value = p.nombre;
-    cNom.font = { bold: true, size: 11, color: { argb: "FF000000" } };
-    cNom.alignment = { vertical: "middle", indent: 1 };
-    cNom.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_MES_HEADER } };
-    cNom.border = {
-      top: borderThin,
-      bottom: borderThin,
-      left: borderMed,
-      right: borderMed,
-    };
+    cNom.font = { size: 12, color: { theme: 1 }, name: "Calibri", family: 2 };
+    cNom.fill = FILL_AMA;
+    cNom.alignment = { vertical: "middle" };
+    cNom.border = BORDER_ALL;
 
     for (let m = 1; m <= 12; m++) {
-      const startCol = 2 + (m - 1) * N_SUB;
+      const c0 = mesStartCol(m - 1);
       const ses = sesMap.get(`${p.id}|${m}`);
       const pago = pagoMap.get(`${p.id}|${m}`);
 
-      const cForma = ws.getCell(r, startCol);
-      const cBeca = ws.getCell(r, startCol + 1);
-      const cSes = ws.getCell(r, startCol + 2);
-      const cPrec = ws.getCell(r, startCol + 3);
-      const cSub = ws.getCell(r, startCol + 4);
-      const cIva = ws.getCell(r, startCol + 5);
-      const cPag = ws.getCell(r, startCol + 6);
-      const cSal = ws.getCell(r, startCol + 7);
+      // Sub-columnas
+      const cEfvo = ws.getCell(r, c0);     // Efvo. (letra E/T) — editable
+      const cTer  = ws.getCell(r, c0 + 1); // Ter. (terapeuta — no lo tenemos en BD, va 0) — editable
+      const cBeca = ws.getCell(r, c0 + 2); // % beca — editable
+      const cHrs  = ws.getCell(r, c0 + 3); // Horas — editable
+      const cPrc  = ws.getCell(r, c0 + 4); // Precio/Hr — editable (default fórmula =PRECIO_REG, override numérico)
+      const cIng  = ws.getCell(r, c0 + 5); // Ingreso — CALCULADO (sin fondo)
+      const cPag  = ws.getCell(r, c0 + 6); // Pagado — editable
+      const cSal  = ws.getCell(r, c0 + 7); // Saldo — CALCULADO (sin fondo)
 
-      if (ses || pago) {
-        // Forma
-        const forma = pago?.forma || ses?.forma_pago_mes || "Efectivo";
-        cForma.value = forma;
+      // Datos
+      const forma = pago?.forma || ses?.forma_pago_mes || "Efectivo";
+      cEfvo.value = forma === "Efectivo" ? "E" : "T";
+      cEfvo.font = { size: 12, color: { theme: 1 }, name: "Calibri", family: 2 };
+      cEfvo.alignment = { horizontal: "center", vertical: "middle" };
+      cEfvo.numFmt = FMT_REF;
+      cEfvo.fill = FILL_AMA;
+      cEfvo.border = BORDER_ALL;
 
-        // % Beca
-        cBeca.value = Number(ses?.beca_porcentaje ?? 0);
-        cBeca.numFmt = '0"%"';
+      cTer.value = 0; // sin terapeuta tracked
+      cTer.font = { size: 12, color: { theme: 1 }, name: "Calibri", family: 2 };
+      cTer.alignment = { horizontal: "center", vertical: "middle" };
+      cTer.numFmt = FMT_REF;
+      cTer.fill = FILL_AMA;
+      cTer.border = BORDER_ALL;
 
-        // Sesiones (mat + reg)
-        const sM = Number(ses?.sesiones_matutinas ?? 0);
-        const sR = Number(ses?.sesiones_regulares ?? 0);
-        const totalSes = sM + sR;
-        cSes.value = totalSes;
+      cBeca.value = Number(ses?.beca_porcentaje ?? 0) / 100;
+      cBeca.font = { size: 12, color: { theme: 1 }, name: "Calibri", family: 2 };
+      cBeca.alignment = { horizontal: "center", vertical: "middle" };
+      cBeca.numFmt = "0%";
+      cBeca.fill = FILL_AMA;
+      cBeca.border = BORDER_ALL;
 
-        // Precio (promedio ponderado o paciente/global)
-        const pReg = p.precio_sesion_regular ?? precioGlobalReg;
-        const pMat = p.precio_sesion_matutina ?? precioGlobalMat;
-        cPrec.value = totalSes > 0 ? (sM * pMat + sR * pReg) / totalSes : pReg;
-        moneyFmt(cPrec);
+      const sM = Number(ses?.sesiones_matutinas ?? 0);
+      const sR = Number(ses?.sesiones_regulares ?? 0);
+      const totalSes = sM + sR;
+      cHrs.value = totalSes;
+      cHrs.font = { size: 11, color: { theme: 1 }, name: "Arial" };
+      cHrs.alignment = { horizontal: "center", vertical: "middle" };
+      cHrs.fill = FILL_AMA;
+      cHrs.border = BORDER_ALL;
 
-        // Pagado
-        cPag.value = pago?.total ?? 0;
-        moneyFmt(cPag);
+      // Precio: si el paciente tiene precio propio, valor numérico; si no, fórmula =PRECIO_REG (recalcula con Parámetros)
+      const pReg = p.precio_sesion_regular ?? null;
+      const pMat = p.precio_sesion_matutina ?? null;
+      let precioVal: number | { formula: string };
+      if (totalSes > 0 && (pReg !== null || pMat !== null)) {
+        const pRegEff = pReg ?? precioGlobalReg;
+        const pMatEff = pMat ?? precioGlobalMat;
+        precioVal = (sM * pMatEff + sR * pRegEff) / totalSes;
+      } else if (pReg !== null) {
+        precioVal = pReg;
+      } else {
+        precioVal = { formula: "PRECIO_REG" };
       }
+      cPrc.value = precioVal;
+      cPrc.numFmt = FMT_REF;
+      cPrc.font = { size: 11, color: { theme: 1 }, name: "Arial" };
+      cPrc.alignment = { vertical: "middle" };
+      cPrc.fill = FILL_AMA;
+      cPrc.border = BORDER_ALL;
 
-      // Fórmulas en Subtotal, IVA, Saldo (siempre presentes)
-      const colForma = ws.getColumn(startCol).letter;
-      const colBeca = ws.getColumn(startCol + 1).letter;
-      const colSes = ws.getColumn(startCol + 2).letter;
-      const colPrec = ws.getColumn(startCol + 3).letter;
-      const colSub = ws.getColumn(startCol + 4).letter;
-      const colIva = ws.getColumn(startCol + 5).letter;
-      const colPag = ws.getColumn(startCol + 6).letter;
+      // Ingreso (calculado, sin fondo, sin border)
+      const colHrs = ws.getColumn(c0 + 3).letter;
+      const colPrc = ws.getColumn(c0 + 4).letter;
+      const colBec = ws.getColumn(c0 + 2).letter;
+      const colIng = ws.getColumn(c0 + 5).letter;
+      const colPag = ws.getColumn(c0 + 6).letter;
+      cIng.value = { formula: `${colHrs}${r}*${colPrc}${r}*(1-${colBec}${r})` };
+      cIng.numFmt = FMT_REF;
+      cIng.font = { size: 11, color: { theme: 1 }, name: "Arial" };
+      cIng.alignment = { vertical: "middle" };
 
-      // Subtotal = Sesiones × Precio × (1 - Beca/100)
-      cSub.value = { formula: `IFERROR(${colSes}${r}*${colPrec}${r}*(1-${colBeca}${r}/100),0)` };
-      moneyFmt(cSub);
-      cSub.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_CALC_BG } };
+      // Pagado (editable)
+      cPag.value = pago?.total ?? 0;
+      cPag.numFmt = FMT_REF;
+      cPag.font = { size: 11, color: { theme: 1 }, name: "Arial" };
+      cPag.alignment = { vertical: "middle" };
+      cPag.fill = FILL_AMA;
+      cPag.border = BORDER_ALL;
 
-      // IVA = 0 si Forma="Efectivo" o vacío, sino Subtotal × IVA
-      cIva.value = { formula: `IF(OR(${colForma}${r}="Efectivo",${colForma}${r}=""),0,${colSub}${r}*IVA)` };
-      moneyFmt(cIva);
-      cIva.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_CALC_BG } };
-
-      // Saldo = Subtotal + IVA - Pagado
-      cSal.value = { formula: `${colSub}${r}+${colIva}${r}-${colPag}${r}` };
-      moneyFmt(cSal);
-      cSal.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_CALC_BG } };
-
-      // Alineación y bordes uniformes para todas las celdas del mes
-      const celdas = [cForma, cBeca, cSes, cPrec, cSub, cIva, cPag, cSal];
-      celdas.forEach((c, idx) => {
-        if (!c.alignment) c.alignment = { horizontal: idx <= 2 ? "center" : "right", vertical: "middle" };
-        c.font = { size: 11, color: { argb: "FF000000" } };
-        c.border = {
-          top: borderThin,
-          bottom: borderThin,
-          left: idx === 0 ? borderMed : { style: "hair", color: { argb: COLOR_BORDE_LIGHT } },
-          right: idx === N_SUB - 1 ? borderMed : { style: "hair", color: { argb: COLOR_BORDE_LIGHT } },
-        };
-      });
+      // Saldo (calculado, sin fondo)
+      cSal.value = { formula: `${colIng}${r}-${colPag}${r}` };
+      cSal.numFmt = FMT_REF;
+      cSal.font = { size: 11, color: { theme: 1 }, name: "Arial" };
+      cSal.alignment = { vertical: "middle" };
     }
 
     // Total Año Pagado = suma de los 12 "Pagado"
     const sumPagados: string[] = [];
     for (let m = 0; m < 12; m++) {
-      sumPagados.push(ws.getColumn(2 + m * N_SUB + 6).letter + r);
+      sumPagados.push(ws.getColumn(mesStartCol(m) + 6).letter + r);
     }
-    const cTotAno = ws.getCell(r, totalCols);
+    const cTotAno = ws.getCell(r, cTot0);
     cTotAno.value = { formula: sumPagados.join("+") };
-    moneyFmt(cTotAno);
-    cTotAno.font = { bold: true, size: 11, color: { argb: "FF000000" } };
-    cTotAno.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_TOTAL } };
+    cTotAno.numFmt = FMT_REF;
+    cTotAno.font = { bold: true, size: 11, color: { theme: 1 }, name: "Arial" };
+    cTotAno.fill = FILL_AMA;
     cTotAno.alignment = { horizontal: "right", vertical: "middle" };
-    cTotAno.border = {
-      top: borderThin,
-      bottom: borderThin,
-      left: borderMed,
-      right: borderMed,
-    };
-
-    ws.getRow(r).height = 20;
+    cTotAno.border = BORDER_ALL;
   });
 
-  // Fila TOTAL DEL MES
+  // ----- Fila TOTAL DEL MES -----
   if (pacActivos.length > 0) {
-    const lastRow = pacActivos.length + 4;
-    const totRowNum = lastRow + 1;
-    const totalBorder = {
-      top: { style: "medium" as const, color: { argb: COLOR_BORDE } },
-      bottom: { style: "medium" as const, color: { argb: COLOR_BORDE } },
-      left: { style: "hair" as const, color: { argb: COLOR_BORDE_LIGHT } },
-      right: { style: "hair" as const, color: { argb: COLOR_BORDE_LIGHT } },
-    };
-    const totalBorderEdge = {
-      ...totalBorder,
-      left: { style: "medium" as const, color: { argb: COLOR_BORDE } },
-    };
+    const lastDataRow = 7 + pacActivos.length - 1;
+    const totRowNum = lastDataRow + 2; // dejo una fila de espacio
 
-    const cLabel = ws.getCell(totRowNum, 1);
+    const cLabel = ws.getCell(totRowNum, 3);
     cLabel.value = "TOTAL DEL MES";
-    cLabel.font = { bold: true, size: 11, color: { argb: "FF000000" } };
-    cLabel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_TOTAL } };
-    cLabel.alignment = { horizontal: "right", vertical: "middle", indent: 1 };
-    cLabel.border = {
-      top: { style: "medium", color: { argb: COLOR_BORDE } },
-      bottom: { style: "medium", color: { argb: COLOR_BORDE } },
-      left: { style: "medium", color: { argb: COLOR_BORDE } },
-      right: { style: "medium", color: { argb: COLOR_BORDE } },
-    };
+    cLabel.font = { bold: true, size: 11, color: { theme: 1 }, name: "Calibri" };
+    cLabel.fill = FILL_VRD;
+    cLabel.alignment = { horizontal: "right", vertical: "middle" };
+    cLabel.border = BORDER_ALL;
 
     for (let m = 0; m < 12; m++) {
-      const startCol = 2 + m * N_SUB;
-      // Pintar todas las 8 sub-columnas con el amarillo del total (incluso si están vacías)
-      for (let idx = 0; idx < N_SUB; idx++) {
-        const c = ws.getCell(totRowNum, startCol + idx);
-        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_TOTAL } };
-        c.font = { bold: true, size: 11, color: { argb: "FF000000" } };
-        c.alignment = { horizontal: idx <= 2 ? "center" : "right", vertical: "middle" };
-        c.border = idx === 0 ? totalBorderEdge : (idx === N_SUB - 1 ? { ...totalBorder, right: { style: "medium" as const, color: { argb: COLOR_BORDE } } } : totalBorder);
-      }
-      // Subtotal (4), IVA (5), Pagado (6), Saldo (7) → SUM
-      [4, 5, 6, 7].forEach((idx) => {
-        const colL = ws.getColumn(startCol + idx).letter;
-        const c = ws.getCell(totRowNum, startCol + idx);
-        c.value = { formula: `SUM(${colL}5:${colL}${lastRow})` };
-        moneyFmt(c);
+      const c0 = mesStartCol(m);
+      // Sumamos Horas (idx 3), Ingreso (idx 5), Pagado (idx 6), Saldo (idx 7)
+      const sums: Array<[number, string]> = [
+        [3, "0"], [5, FMT_REF], [6, FMT_REF], [7, FMT_REF],
+      ];
+      sums.forEach(([idx, fmt]) => {
+        const colL = ws.getColumn(c0 + idx).letter;
+        const c = ws.getCell(totRowNum, c0 + idx);
+        c.value = { formula: `SUM(${colL}7:${colL}${lastDataRow})` };
+        c.numFmt = fmt;
+        c.font = { bold: true, size: 11, color: { theme: 1 }, name: "Arial" };
+        c.fill = FILL_VRD;
+        c.alignment = { horizontal: idx === 3 ? "center" : "right", vertical: "middle" };
+        c.border = BORDER_ALL;
       });
     }
     // Total Año
-    const totColL = ws.getColumn(totalCols).letter;
-    const cAno = ws.getCell(totRowNum, totalCols);
-    cAno.value = { formula: `SUM(${totColL}5:${totColL}${lastRow})` };
-    moneyFmt(cAno);
-    cAno.font = { bold: true, size: 11, color: { argb: "FF000000" } };
-    cAno.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_TOTAL } };
+    const colTot = ws.getColumn(cTot0).letter;
+    const cAno = ws.getCell(totRowNum, cTot0);
+    cAno.value = { formula: `SUM(${colTot}7:${colTot}${lastDataRow})` };
+    cAno.numFmt = FMT_REF;
+    cAno.font = { bold: true, size: 11, color: { theme: 1 }, name: "Arial" };
+    cAno.fill = FILL_VRD;
     cAno.alignment = { horizontal: "right", vertical: "middle" };
-    cAno.border = {
-      top: { style: "medium", color: { argb: COLOR_BORDE } },
-      bottom: { style: "medium", color: { argb: COLOR_BORDE } },
-      left: { style: "medium", color: { argb: COLOR_BORDE } },
-      right: { style: "medium", color: { argb: COLOR_BORDE } },
-    };
-    ws.getRow(totRowNum).height = 22;
+    cAno.border = BORDER_ALL;
   }
 
-  // Anchos
-  ws.getColumn(1).width = 28;
+  // ----- Anchos de columna (replicando archivo de referencia) -----
+  ws.getColumn(1).width = 5.33;
+  ws.getColumn(2).width = 4.5;
+  ws.getColumn(3).width = 30.33;
+  ws.getColumn(4).width = 1.5; // gap
   for (let m = 0; m < 12; m++) {
-    const start = 2 + m * N_SUB;
-    ws.getColumn(start).width = 10;     // Forma
-    ws.getColumn(start + 1).width = 7;  // % Beca
-    ws.getColumn(start + 2).width = 9;  // Sesiones
-    ws.getColumn(start + 3).width = 10; // Precio
-    ws.getColumn(start + 4).width = 11; // Subtotal
-    ws.getColumn(start + 5).width = 9;  // IVA
-    ws.getColumn(start + 6).width = 11; // Pagado
-    ws.getColumn(start + 7).width = 11; // Saldo
+    const c0 = mesStartCol(m);
+    ws.getColumn(c0).width = 5.5;       // Efvo
+    ws.getColumn(c0 + 1).width = 7;     // Ter
+    ws.getColumn(c0 + 2).width = 7.83;  // %beca
+    ws.getColumn(c0 + 3).width = 7;     // Horas
+    ws.getColumn(c0 + 4).width = 10.66; // Precio/Hr
+    ws.getColumn(c0 + 5).width = 12;    // Ingreso
+    ws.getColumn(c0 + 6).width = 12.33; // Pagado
+    ws.getColumn(c0 + 7).width = 9.5;   // Saldo
+    if (m < 11) ws.getColumn(c0 + N_SUB).width = 1.5; // gap entre meses
   }
-  ws.getColumn(totalCols).width = 13;
+  ws.getColumn(cTot0 - 1).width = 1.5; // gap antes del Total Año
+  ws.getColumn(cTot0).width = 13;
 
-  ws.views = [{ state: "frozen", ySplit: 4, xSplit: 1 }];
-  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: totalCols } };
+  // Freeze: 6 filas arriba (título + parámetros + headers), 3 columnas a la izquierda
+  ws.views = [{ state: "frozen", ySplit: 6, xSplit: 3 }];
 }
 
 // ============================================================================
