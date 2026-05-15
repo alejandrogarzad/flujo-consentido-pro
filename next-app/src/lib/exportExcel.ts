@@ -735,6 +735,218 @@ function pestCobranzaMensual(
 }
 
 // ============================================================================
+// PESTAÑA: Cobranza Detallada (Paciente × Mes × {Forma, Subtotal, IVA, Total})
+// ============================================================================
+
+function pestCobranzaDetallada(
+  wb: ExcelJS.Workbook,
+  anio: number,
+  pacientes: Paciente[],
+  pagos: PagoTerapia[],
+) {
+  const ws = wb.addWorksheet("Cobranza Detallada", { properties: { tabColor: { argb: "FF22C55E" } } });
+  const MESES_LARGO = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+
+  // Título
+  const totalCols = 1 + 12 * 4 + 1; // Paciente + 12 meses × 4 + Total
+  ws.mergeCells(1, 1, 1, totalCols);
+  ws.getCell(1, 1).value = `💳 Cobranza Detallada ${anio} — cuánto y cómo pagó cada paciente cada mes`;
+  ws.getCell(1, 1).font = { bold: true, size: 13, color: { argb: "FF065F46" } };
+  ws.getCell(1, 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
+  ws.getCell(1, 1).alignment = { horizontal: "center", vertical: "middle" };
+  ws.getRow(1).height = 28;
+
+  ws.mergeCells(2, 1, 2, totalCols);
+  ws.getCell(2, 1).value = "Por cada mes: Forma de pago · Subtotal sin IVA · IVA · Total Pagado";
+  ws.getCell(2, 1).font = { italic: true, color: { argb: "FF065F46" }, size: 10 };
+  ws.getCell(2, 1).alignment = { horizontal: "center" };
+
+  // Headers de dos niveles
+  // Fila 3: A=Paciente (merged 2 filas); B..E=ENERO (merged 4 cols); F..I=FEBRERO; ...; última=Total Año (merged 2 filas)
+  // Fila 4: A=""; B=Forma C=Subtotal D=IVA E=Total; F..I idem; ...
+
+  ws.mergeCells(3, 1, 4, 1); // Paciente
+  ws.getCell(3, 1).value = "Paciente";
+
+  for (let m = 0; m < 12; m++) {
+    const startCol = 2 + m * 4;
+    ws.mergeCells(3, startCol, 3, startCol + 3);
+    const cell = ws.getCell(3, startCol);
+    cell.value = MESES_LARGO[m];
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_HEADER_EDIT } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = {
+      top: { style: "thin", color: { argb: "FFD1D5DB" } },
+      bottom: { style: "thin", color: { argb: "FFD1D5DB" } },
+      left: { style: "thin", color: { argb: "FFD1D5DB" } },
+      right: { style: "thin", color: { argb: "FFD1D5DB" } },
+    };
+
+    // Sub-headers
+    const sub = ["Forma", "Subtotal s/IVA", "IVA", "Total"];
+    sub.forEach((s, i) => {
+      const sc = ws.getCell(4, startCol + i);
+      sc.value = s;
+      sc.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 9 };
+      sc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: i === 0 ? COLOR_HEADER_EDIT : COLOR_HEADER_CALC } };
+      sc.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      sc.border = {
+        top: { style: "thin", color: { argb: "FFD1D5DB" } },
+        bottom: { style: "thin", color: { argb: "FFD1D5DB" } },
+        left: { style: "thin", color: { argb: "FFD1D5DB" } },
+        right: { style: "thin", color: { argb: "FFD1D5DB" } },
+      };
+    });
+  }
+
+  ws.mergeCells(3, totalCols, 4, totalCols);
+  const totalCell = ws.getCell(3, totalCols);
+  totalCell.value = "Total Año";
+  totalCell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+  totalCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_HEADER_CALC } };
+  totalCell.alignment = { horizontal: "center", vertical: "middle" };
+
+  // Header del paciente con estilo
+  const pacHdr = ws.getCell(3, 1);
+  pacHdr.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+  pacHdr.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_HEADER_EDIT } };
+  pacHdr.alignment = { horizontal: "center", vertical: "middle" };
+
+  ws.getRow(3).height = 24;
+  ws.getRow(4).height = 30;
+
+  // Construir mapa: (paciente_id, mes) → { forma, total }
+  // Si hay múltiples pagos con distintas formas en un mes, "Mixto"
+  const pagosAnio = pagos.filter((p) => p.anio === anio);
+  const pagoMap = new Map<string, { forma: string; total: number }>();
+  for (const p of pagosAnio) {
+    const key = `${p.paciente_id}|${p.mes}`;
+    const existing = pagoMap.get(key);
+    if (!existing) {
+      pagoMap.set(key, { forma: p.forma_pago, total: Number(p.monto_pagado ?? 0) });
+    } else {
+      existing.total += Number(p.monto_pagado ?? 0);
+      if (existing.forma !== p.forma_pago) existing.forma = "Mixto";
+    }
+  }
+
+  // Filas de pacientes — solo los que tienen al menos un pago este año
+  const pacientesConPago = pacientes.filter((p) =>
+    Array.from(pagoMap.keys()).some((k) => k.startsWith(`${p.id}|`)),
+  );
+
+  pacientesConPago.forEach((p, i) => {
+    const r = 5 + i;
+    ws.getCell(r, 1).value = p.nombre;
+    ws.getCell(r, 1).font = { bold: true };
+    ws.getCell(r, 1).alignment = { vertical: "middle" };
+
+    for (let m = 1; m <= 12; m++) {
+      const startCol = 2 + (m - 1) * 4;
+      const dato = pagoMap.get(`${p.id}|${m}`);
+      const formaCell = ws.getCell(r, startCol);
+      const subCell = ws.getCell(r, startCol + 1);
+      const ivaCell = ws.getCell(r, startCol + 2);
+      const totalCellCol = ws.getCell(r, startCol + 3);
+
+      if (!dato || dato.total === 0) {
+        // Mes sin pago
+        formaCell.value = "—";
+        formaCell.font = { color: { argb: "FFD1D5DB" }, italic: true };
+        formaCell.alignment = { horizontal: "center" };
+        subCell.value = null;
+        ivaCell.value = null;
+        totalCellCol.value = null;
+      } else {
+        formaCell.value = dato.forma;
+        formaCell.alignment = { horizontal: "center" };
+        // Color según forma
+        const colorForma = dato.forma === "Efectivo" ? "FFFEF3C7" : "FFEFE4FF";
+        formaCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colorForma } };
+
+        totalCellCol.value = dato.total;
+        moneyFmt(totalCellCol);
+
+        const formaLetter = ws.getColumn(startCol).letter;
+        const totalLetter = ws.getColumn(startCol + 3).letter;
+        const subLetter = ws.getColumn(startCol + 1).letter;
+        // Subtotal sin IVA = total/(1+IVA) si forma != Efectivo, else total
+        subCell.value = {
+          formula: `IF(${formaLetter}${r}="Efectivo",${totalLetter}${r},${totalLetter}${r}/(1+IVA))`,
+        };
+        moneyFmt(subCell);
+        subCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+
+        // IVA = total - subtotal
+        ivaCell.value = {
+          formula: `${totalLetter}${r}-${subLetter}${r}`,
+        };
+        moneyFmt(ivaCell);
+        ivaCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+      }
+    }
+
+    // Total Año = suma de las 12 columnas "Total" (las que son cada 4 a partir de E)
+    // Cols: E, I, M, Q, U, Y, AC, AG, AK, AO, AS, AW
+    const totalCols: string[] = [];
+    for (let m = 0; m < 12; m++) {
+      totalCols.push(ws.getColumn(2 + m * 4 + 3).letter + r);
+    }
+    const totalAnoCell = ws.getCell(r, 1 + 12 * 4 + 1);
+    totalAnoCell.value = { formula: totalCols.join("+") };
+    moneyFmt(totalAnoCell);
+    totalAnoCell.font = { bold: true };
+    totalAnoCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
+  });
+
+  // Fila TOTAL del mes (suma de todos los pacientes)
+  if (pacientesConPago.length > 0) {
+    const last = pacientesConPago.length + 4;
+    const totalRowNum = last + 1;
+    ws.getCell(totalRowNum, 1).value = "TOTAL DEL MES";
+    ws.getCell(totalRowNum, 1).font = { bold: true };
+    ws.getCell(totalRowNum, 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_TOTAL } };
+
+    for (let m = 0; m < 12; m++) {
+      const startCol = 2 + m * 4;
+      // Forma → vacío
+      ws.getCell(totalRowNum, startCol).value = null;
+      // Subtotal, IVA, Total → sumas
+      for (let j = 1; j <= 3; j++) {
+        const colLetter = ws.getColumn(startCol + j).letter;
+        const cell = ws.getCell(totalRowNum, startCol + j);
+        cell.value = { formula: `SUM(${colLetter}5:${colLetter}${last})` };
+        moneyFmt(cell);
+        cell.font = { bold: true };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_TOTAL } };
+      }
+    }
+    // Total Año
+    const totalAnoCol = ws.getColumn(1 + 12 * 4 + 1).letter;
+    const cellAno = ws.getCell(totalRowNum, 1 + 12 * 4 + 1);
+    cellAno.value = { formula: `SUM(${totalAnoCol}5:${totalAnoCol}${last})` };
+    moneyFmt(cellAno);
+    cellAno.font = { bold: true };
+    cellAno.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_TOTAL } };
+  }
+
+  // Anchos: paciente ancho, sub-cols delgadas
+  ws.getColumn(1).width = 28;
+  for (let m = 0; m < 12; m++) {
+    const start = 2 + m * 4;
+    ws.getColumn(start).width = 11;     // Forma
+    ws.getColumn(start + 1).width = 10; // Subtotal
+    ws.getColumn(start + 2).width = 8;  // IVA
+    ws.getColumn(start + 3).width = 10; // Total
+  }
+  ws.getColumn(1 + 12 * 4 + 1).width = 12; // Total Año
+
+  ws.views = [{ state: "frozen", ySplit: 4, xSplit: 1 }];
+  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: totalCols } };
+}
+
+// ============================================================================
 // PESTAÑA: Para el Contador (matriz Cliente × Mes — SOLO facturables)
 // ============================================================================
 
@@ -1040,6 +1252,7 @@ export async function generarExcelRespaldo(anio: number): Promise<Blob> {
   // Editables
   pestPacientes(wb, pacientes);
   pestCobranzaMensual(wb, anio, pacientes);
+  pestCobranzaDetallada(wb, anio, pacientes, pagos);
   pestEmpleados(wb, empleados);
   pestTerapias(wb, anio, pacientes, sesiones, pagos);
   pestEventos(wb, anio, eventos, "citas");
@@ -1059,7 +1272,8 @@ export async function generarExcelRespaldo(anio: number): Promise<Blob> {
   // Reordenar: editables primero, resúmenes después, config al final
   const ws = wb.worksheets;
   const reordered = [
-    "Pacientes", "Cobranza Mensual",
+    "Pacientes",
+    "Cobranza Mensual", "Cobranza Detallada",
     "Empleados",
     "Terapias", "Citas", "Evaluaciones",
     "Subarrendamiento",
