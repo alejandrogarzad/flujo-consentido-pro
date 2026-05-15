@@ -1161,9 +1161,14 @@ function pestParaContador(
   }
 
   // ----- Render -----
-  // Layout: A=Cliente, B=Concepto, C-N=meses, O=Total Año
+  // Layout: A=Cliente, B=Concepto, C-N=meses, O=Total c/IVA, P=Subtotal s/IVA, Q=IVA
+  //   - El nombre del cliente se repite en cada fila → así se mantiene el contexto
+  //     si el contador filtra u ordena con autofilter
+  //   - Total c/IVA = lo que hay que cobrar al cliente (suma de meses)
+  //   - Subtotal s/IVA = Total / (1+IVA)  → base gravable para el CFDI
+  //   - IVA = Total - Subtotal             → IVA trasladado
 
-  ws.mergeCells("A1:O1");
+  ws.mergeCells("A1:Q1");
   const c1 = ws.getCell("A1");
   c1.value = `Para el Contador — ${anio}`;
   c1.font = { bold: true, size: 14, color: { argb: "FF000000" } };
@@ -1177,67 +1182,63 @@ function pestParaContador(
   };
   ws.getRow(1).height = 30;
 
-  ws.mergeCells("A2:O2");
+  ws.mergeCells("A2:Q2");
   const c2 = ws.getCell("A2");
-  c2.value = "Lo que hay que facturar este año: cobros por transferencia / tarjeta / depósito (incluye IVA). El efectivo NO aparece aquí.";
+  c2.value = `Cobros del año por transferencia / tarjeta / depósito (lo que hay que facturar). Cada renglón es una factura potencial. IVA ${(iva * 100).toFixed(0)}% calculado.`;
   c2.font = { italic: true, color: { argb: "FF7F7F7F" }, size: 10 };
   c2.alignment = { horizontal: "center", wrapText: true };
-  ws.getRow(2).height = 24;
+  ws.getRow(2).height = 28;
 
   ws.addRow([]);
-  ws.addRow(["Cliente", "Concepto", ...MESES_CORTO, "Total Año"]);
-  applyHeader(ws, 4, [{}, {}, ...new Array(13).fill({ calc: true })]);
+  ws.addRow(["Cliente", "Concepto", ...MESES_CORTO, "Total Año (con IVA)", "Subtotal (sin IVA)", "IVA"]);
+  applyHeader(ws, 4, [{}, {}, ...new Array(15).fill({ calc: true })]);
 
   const clientesOrdenados = Array.from(buckets.keys()).sort((a, b) => a.localeCompare(b));
   const ORDEN_CONCEPTOS: Concepto[] = ["Terapia", "Cita", "Evaluación", "Subarrendamiento"];
 
-  let curRow = 5;
   const totalesPorMes = new Array(12).fill(0);
   let totalAnioGran = 0;
 
-  clientesOrdenados.forEach((cliente, idx) => {
+  clientesOrdenados.forEach((cliente) => {
     const cMap = buckets.get(cliente)!;
     const conceptosDeEsteCliente = ORDEN_CONCEPTOS.filter((c) => cMap.has(c));
-    conceptosDeEsteCliente.forEach((concepto, conceptoIdx) => {
+    conceptosDeEsteCliente.forEach((concepto) => {
       const meses = cMap.get(concepto)!;
       const totalAnio = meses.reduce((s, v) => s + v, 0);
+      const subtotal = totalAnio / (1 + iva);
+      const ivaMonto = totalAnio - subtotal;
       totalAnioGran += totalAnio;
       meses.forEach((v, i) => { totalesPorMes[i] += v; });
 
       const values: (string | number)[] = [
-        conceptoIdx === 0 ? cliente : "", // nombre solo en primera fila del cliente
+        cliente,            // se repite en cada fila — sigue claro al filtrar
         concepto,
         ...meses.map((v) => v || 0),
         totalAnio,
+        subtotal,
+        ivaMonto,
       ];
       const row = ws.addRow(values);
-      // Money format cols C..O (12 meses + total)
-      for (let c = 3; c <= 15; c++) moneyFmt(row.getCell(c));
-      // Concepto en cursiva gris para distinguir del nombre
+      for (let c = 3; c <= 17; c++) moneyFmt(row.getCell(c));
+      row.getCell(1).font = { bold: true };
       row.getCell(2).font = { italic: true, color: { argb: "FF6B7280" }, size: 10 };
-      // Nombre en bold (solo primera fila)
-      if (conceptoIdx === 0) row.getCell(1).font = { bold: true };
-      // Total año en bold
       row.getCell(15).font = { bold: true };
-      curRow++;
     });
-    // Separador visual entre clientes: borde top medium en la siguiente fila
-    if (idx < clientesOrdenados.length - 1) {
-      // Lo aplicamos en el siguiente loop iteration con un truco — más simple:
-      // marcar la primera fila del SIGUIENTE cliente con border top
-    }
-    void idx;
   });
 
-  // Fila TOTAL DEL MES
+  // Fila TOTAL DEL MES (incluye subtotal e IVA del año)
   if (clientesOrdenados.length > 0) {
-    const totalValues: (string | number)[] = ["TOTAL DEL MES", "", ...totalesPorMes, totalAnioGran];
-    totalRow(ws, totalValues, Array.from({ length: 13 }, (_, i) => i + 3));
+    const subtotalAnio = totalAnioGran / (1 + iva);
+    const ivaAnio = totalAnioGran - subtotalAnio;
+    const totalValues: (string | number)[] = [
+      "TOTAL DEL AÑO", "", ...totalesPorMes, totalAnioGran, subtotalAnio, ivaAnio,
+    ];
+    totalRow(ws, totalValues, Array.from({ length: 15 }, (_, i) => i + 3));
   }
 
-  setWidths(ws, [28, 16, ...new Array(12).fill(11), 14]);
+  setWidths(ws, [28, 16, ...new Array(12).fill(11), 16, 16, 12]);
   ws.views = [{ state: "frozen", ySplit: 4, xSplit: 2 }];
-  ws.autoFilter = `A4:O4`;
+  ws.autoFilter = `A4:Q4`;
 }
 
 // ============================================================================
