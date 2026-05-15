@@ -279,7 +279,18 @@ function pestEmpleados(wb: ExcelJS.Workbook, empleados: Empleado[]) {
 // 4-5. PESTAÑAS: Citas y Evaluaciones
 // ============================================================================
 
-function pestEventos(
+// Citas y Evaluaciones en formato matriz idéntico a Terapias.
+// Cada cliente/paciente ocupa una fila; por cada mes hay 8 sub-cols:
+//   Efvo | Ter | %beca | Horas | Precio/Hr | Ingreso | Pagado | Saldo
+//
+// Los eventos individuales se agregan por (cliente, mes):
+//   - "Horas"     = cantidad de eventos en ese mes
+//   - "Precio/Hr" = precio promedio = sum_precio_base / count
+//   - "Ingreso"   = fórmula = Horas × Precio/Hr (Beca=0 siempre en eventos)
+//   - "Pagado"    = sum_monto_pagado (lo que el cliente entregó)
+//   - "Efvo"      = "E" si TODOS los eventos del mes fueron en efectivo, "T" si hay alguno no-efectivo
+//   - "Ter"       = 0 (no tracking de terapeuta en BD)
+function pestEventosMatriz(
   wb: ExcelJS.Workbook,
   anio: number,
   eventos: Evento[],
@@ -293,63 +304,211 @@ function pestEventos(
   const TIPOS_EVAL = ["Evaluación"];
   const tipos = tipoFiltro === "citas" ? TIPOS_CITAS : TIPOS_EVAL;
   const sheetName = tipoFiltro === "citas" ? "Citas" : "Evaluaciones";
+  const ws = wb.addWorksheet(sheetName, { properties: { tabColor: { argb: "FFFFC000" } } });
 
-  const ws = wb.addWorksheet(sheetName, { properties: { tabColor: { argb: "FFEC4899" } } });
-  ws.addRow([
-    "Fecha", "Tipo", "Paciente / Solicitante", "Forma de Pago",
-    "Subtotal (sin IVA)", "IVA", "Total", "Pagado", "Saldo", "Notas",
-  ]);
-  applyHeader(ws, 1, [
-    {}, {}, {}, {},
-    {}, { calc: true }, { calc: true }, {}, { calc: true }, {},
-  ]);
+  // ----- Paleta (idéntica a Terapias) -----
+  const FILL_AMA = { type: "pattern", pattern: "solid", fgColor: { theme: 7, tint: 0.7999816888943144 } } as unknown as ExcelJS.Fill;
+  const FILL_VRD = { type: "pattern", pattern: "solid", fgColor: { theme: 9, tint: 0.7999816888943144 } } as unknown as ExcelJS.Fill;
+  const FONT_AZUL = { theme: 8, tint: -0.249977111117893 } as unknown as ExcelJS.Color;
+  const FMT_REF = '_-* #,##0.00_-;-* #,##0.00_-;_-* "-"??_-;_-@_-';
+  const BORDER_THIN = { style: "thin" as const };
+  const BORDER_ALL = { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN };
 
-  const evs = eventos
-    .filter((ev) => ev.fecha?.startsWith(String(anio)) && tipos.includes(ev.tipo))
-    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const SUB_COLS = ["Efvo.", "Ter.", "% beca", "Horas", "Precio/Hr", "Ingreso", "Pagado", "Saldo"];
+  const N_SUB = SUB_COLS.length;
+  const MESES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+  const mesStartCol = (m: number) => 5 + m * (N_SUB + 1);
+  const cTot0 = mesStartCol(11) + N_SUB + 1;
 
-  evs.forEach((ev, i) => {
-    const r = i + 2;
-    const ivaFx = `IF(D${r}="Efectivo",0,E${r}*IVA)`;
-    const totalFx = `E${r}+F${r}`;
-    const saldoFx = `G${r}-H${r}`;
+  // ----- Filas 1-2: título + subtítulo -----
+  const tit = ws.getCell(1, 1);
+  tit.value = sheetName === "Citas" ? `Citas ${anio}` : `Evaluaciones ${anio}`;
+  tit.font = { bold: true, size: 14, color: FONT_AZUL, name: "Arial" };
+  tit.alignment = { vertical: "middle" };
+  ws.getRow(1).height = 22;
 
-    const row = ws.addRow([
-      ev.fecha ? new Date(ev.fecha + "T12:00:00") : null,
-      ev.tipo,
-      ev.nombre_paciente,
-      ev.forma_pago,
-      Number(ev.precio_base ?? 0),
-      { formula: ivaFx },
-      { formula: totalFx },
-      Number(ev.monto_pagado ?? 0),
-      { formula: saldoFx },
-      ev.notas ?? "",
-    ]);
-    row.getCell(1).numFmt = "yyyy-mm-dd";
-    [5, 6, 7, 8, 9].forEach((c) => moneyFmt(row.getCell(c)));
-    [6, 7, 9].forEach((c) => {
-      row.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_CALC_BG } };
+  // ----- Fila 5: header de mes (verde pastel) -----
+  for (let m = 0; m < 12; m++) {
+    const c0 = mesStartCol(m);
+    ws.mergeCells(5, c0, 5, c0 + N_SUB - 1);
+    const hd = ws.getCell(5, c0);
+    hd.value = MESES[m];
+    hd.font = { bold: true, size: 11, color: { theme: 1 }, name: "Calibri" };
+    hd.fill = FILL_VRD;
+    hd.alignment = { horizontal: "center", vertical: "middle" };
+    hd.border = BORDER_ALL;
+    for (let cc = c0 + 1; cc <= c0 + N_SUB - 1; cc++) {
+      const sub = ws.getCell(5, cc);
+      sub.fill = FILL_VRD;
+      sub.border = BORDER_ALL;
+    }
+  }
+  const hdTot = ws.getCell(5, cTot0);
+  hdTot.value = "Total Año";
+  hdTot.font = { bold: true, size: 11, color: { theme: 1 }, name: "Calibri" };
+  hdTot.fill = FILL_VRD;
+  hdTot.alignment = { horizontal: "center", vertical: "middle" };
+  hdTot.border = BORDER_ALL;
+
+  // ----- Fila 6: sub-headers -----
+  for (let m = 0; m < 12; m++) {
+    const c0 = mesStartCol(m);
+    SUB_COLS.forEach((label, i) => {
+      const sh = ws.getCell(6, c0 + i);
+      sh.value = label;
+      sh.font = { bold: true, size: 11, color: { theme: 1 }, name: "Calibri" };
+      sh.alignment = { horizontal: "left" };
     });
-  });
+  }
+  const shTot = ws.getCell(6, cTot0);
+  shTot.value = "Pagado";
+  shTot.font = { bold: true, size: 11, color: { theme: 1 }, name: "Calibri" };
+  shTot.alignment = { horizontal: "left" };
 
-  if (evs.length > 0) {
-    addListValidation(ws, "B", 2, evs.length + 1, tipos);
-    addListValidation(ws, "D", 2, evs.length + 1, FORMAS_PAGO);
-    const last = evs.length + 1;
-    totalRow(ws, [
-      "TOTAL", "", "", "",
-      { formula: `SUM(E2:E${last})` },
-      { formula: `SUM(F2:F${last})` },
-      { formula: `SUM(G2:G${last})` },
-      { formula: `SUM(H2:H${last})` },
-      { formula: `SUM(I2:I${last})` },
-      "",
-    ], [5, 6, 7, 8, 9]);
+  // ----- Agregar eventos por (cliente, mes) -----
+  type Agg = { count: number; sumPrecio: number; sumPagado: number; algunaNoEfectivo: boolean };
+  const data = new Map<string, Agg[]>(); // cliente → 12 meses
+
+  const evs = eventos.filter((ev) => ev.fecha?.startsWith(String(anio)) && tipos.includes(ev.tipo));
+  for (const ev of evs) {
+    const nombre = (ev.nombre_paciente || "(sin nombre)").trim();
+    const mes = Number(ev.fecha!.slice(5, 7));
+    if (mes < 1 || mes > 12) continue;
+    if (!data.has(nombre)) {
+      data.set(nombre, Array.from({ length: 12 }, () => ({ count: 0, sumPrecio: 0, sumPagado: 0, algunaNoEfectivo: false })));
+    }
+    const slot = data.get(nombre)![mes - 1];
+    slot.count += 1;
+    slot.sumPrecio += Number(ev.precio_base ?? 0);
+    slot.sumPagado += Number(ev.monto_pagado ?? 0);
+    if (ev.forma_pago && ev.forma_pago !== "Efectivo") slot.algunaNoEfectivo = true;
   }
 
-  setWidths(ws, [12, 28, 30, 14, 14, 10, 12, 11, 11, 28]);
-  ws.views = [{ state: "frozen", ySplit: 1 }];
+  const clientes = Array.from(data.keys()).sort((a, b) => a.localeCompare(b));
+
+  clientes.forEach((cliente, pi) => {
+    const r = 7 + pi;
+    const meses = data.get(cliente)!;
+
+    // Col B: número
+    const cNum = ws.getCell(r, 2);
+    cNum.value = pi + 1;
+    cNum.font = { size: 11, color: { theme: 1 }, name: "Arial" };
+    cNum.alignment = { horizontal: "center" };
+
+    // Col C: nombre (amarillo)
+    const cNom = ws.getCell(r, 3);
+    cNom.value = cliente;
+    cNom.font = { size: 12, color: { theme: 1 }, name: "Calibri", family: 2 };
+    cNom.fill = FILL_AMA;
+    cNom.alignment = { vertical: "middle" };
+    cNom.border = BORDER_ALL;
+
+    for (let m = 1; m <= 12; m++) {
+      const slot = meses[m - 1];
+      const c0 = mesStartCol(m - 1);
+
+      const cEfvo = ws.getCell(r, c0);
+      const cTer  = ws.getCell(r, c0 + 1);
+      const cBeca = ws.getCell(r, c0 + 2);
+      const cHrs  = ws.getCell(r, c0 + 3);
+      const cPrc  = ws.getCell(r, c0 + 4);
+      const cIng  = ws.getCell(r, c0 + 5);
+      const cPag  = ws.getCell(r, c0 + 6);
+      const cSal  = ws.getCell(r, c0 + 7);
+
+      cEfvo.value = slot.count > 0 ? (slot.algunaNoEfectivo ? "T" : "E") : null;
+      cEfvo.font = { size: 12, color: { theme: 1 }, name: "Calibri", family: 2 };
+      cEfvo.alignment = { horizontal: "center", vertical: "middle" };
+      cEfvo.numFmt = FMT_REF;
+      cEfvo.fill = FILL_AMA;
+      cEfvo.border = BORDER_ALL;
+
+      cTer.value = 0;
+      cTer.font = { size: 12, color: { theme: 1 }, name: "Calibri", family: 2 };
+      cTer.alignment = { horizontal: "center", vertical: "middle" };
+      cTer.numFmt = FMT_REF;
+      cTer.fill = FILL_AMA;
+      cTer.border = BORDER_ALL;
+
+      cBeca.value = 0;
+      cBeca.font = { size: 12, color: { theme: 1 }, name: "Calibri", family: 2 };
+      cBeca.alignment = { horizontal: "center", vertical: "middle" };
+      cBeca.numFmt = "0%";
+      cBeca.fill = FILL_AMA;
+      cBeca.border = BORDER_ALL;
+
+      cHrs.value = slot.count;
+      cHrs.font = { size: 11, color: { theme: 1 }, name: "Arial" };
+      cHrs.alignment = { horizontal: "center", vertical: "middle" };
+      cHrs.fill = FILL_AMA;
+      cHrs.border = BORDER_ALL;
+
+      cPrc.value = slot.count > 0 ? slot.sumPrecio / slot.count : 0;
+      cPrc.numFmt = FMT_REF;
+      cPrc.font = { size: 11, color: { theme: 1 }, name: "Arial" };
+      cPrc.alignment = { vertical: "middle" };
+      cPrc.fill = FILL_AMA;
+      cPrc.border = BORDER_ALL;
+
+      const colHrs = ws.getColumn(c0 + 3).letter;
+      const colPrc = ws.getColumn(c0 + 4).letter;
+      const colBec = ws.getColumn(c0 + 2).letter;
+      const colIng = ws.getColumn(c0 + 5).letter;
+      const colPag = ws.getColumn(c0 + 6).letter;
+      cIng.value = { formula: `${colHrs}${r}*${colPrc}${r}*(1-${colBec}${r})` };
+      cIng.numFmt = FMT_REF;
+      cIng.font = { size: 11, color: { theme: 1 }, name: "Arial" };
+      cIng.alignment = { vertical: "middle" };
+
+      cPag.value = slot.sumPagado;
+      cPag.numFmt = FMT_REF;
+      cPag.font = { size: 11, color: { theme: 1 }, name: "Arial" };
+      cPag.alignment = { vertical: "middle" };
+      cPag.fill = FILL_AMA;
+      cPag.border = BORDER_ALL;
+
+      cSal.value = { formula: `${colIng}${r}-${colPag}${r}` };
+      cSal.numFmt = FMT_REF;
+      cSal.font = { size: 11, color: { theme: 1 }, name: "Arial" };
+      cSal.alignment = { vertical: "middle" };
+    }
+
+    // Total Año Pagado
+    const sumPagados: string[] = [];
+    for (let m = 0; m < 12; m++) {
+      sumPagados.push(ws.getColumn(mesStartCol(m) + 6).letter + r);
+    }
+    const cTotAno = ws.getCell(r, cTot0);
+    cTotAno.value = { formula: sumPagados.join("+") };
+    cTotAno.numFmt = FMT_REF;
+    cTotAno.font = { bold: true, size: 11, color: { theme: 1 }, name: "Arial" };
+    cTotAno.fill = FILL_AMA;
+    cTotAno.alignment = { horizontal: "right", vertical: "middle" };
+    cTotAno.border = BORDER_ALL;
+  });
+
+  // ----- Anchos -----
+  ws.getColumn(1).width = 5.33;
+  ws.getColumn(2).width = 4.5;
+  ws.getColumn(3).width = 30.33;
+  ws.getColumn(4).width = 1.5;
+  for (let m = 0; m < 12; m++) {
+    const c0 = mesStartCol(m);
+    ws.getColumn(c0).width = 5.5;
+    ws.getColumn(c0 + 1).width = 7;
+    ws.getColumn(c0 + 2).width = 7.83;
+    ws.getColumn(c0 + 3).width = 7;
+    ws.getColumn(c0 + 4).width = 10.66;
+    ws.getColumn(c0 + 5).width = 12;
+    ws.getColumn(c0 + 6).width = 12.33;
+    ws.getColumn(c0 + 7).width = 9.5;
+    if (m < 11) ws.getColumn(c0 + N_SUB).width = 1.5;
+  }
+  ws.getColumn(cTot0 - 1).width = 1.5;
+  ws.getColumn(cTot0).width = 13;
+
+  ws.views = [{ state: "frozen", ySplit: 6, xSplit: 3 }];
 }
 
 // ============================================================================
@@ -571,8 +730,8 @@ function pestFlujoEfectivo(wb: ExcelJS.Workbook, anio: number) {
   type Fila = { label: string; formula?: (m: number) => string; subtotal?: "ingresos" | "egresos"; neto?: boolean; saldo?: boolean };
   const filas: Fila[] = [
     { label: "(+) Terapias Cobradas",       formula: (m) => `SUM(Terapias!$${matrixMesSubColLetter(m, MATRIX_SUB.PAGADO)}:$${matrixMesSubColLetter(m, MATRIX_SUB.PAGADO)})` },
-    { label: "(+) Citas Cobradas",          formula: (m) => `SUMIFS(Citas!$H:$H,Citas!$A:$A,">="&DATE(${anio},${m},1),Citas!$A:$A,"<"&DATE(${anio},${m + 1},1))` },
-    { label: "(+) Evaluaciones Cobradas",   formula: (m) => `SUMIFS(Evaluaciones!$H:$H,Evaluaciones!$A:$A,">="&DATE(${anio},${m},1),Evaluaciones!$A:$A,"<"&DATE(${anio},${m + 1},1))` },
+    { label: "(+) Citas Cobradas",          formula: (m) => `SUM(Citas!$${matrixMesSubColLetter(m, MATRIX_SUB.PAGADO)}:$${matrixMesSubColLetter(m, MATRIX_SUB.PAGADO)})` },
+    { label: "(+) Evaluaciones Cobradas",   formula: (m) => `SUM(Evaluaciones!$${matrixMesSubColLetter(m, MATRIX_SUB.PAGADO)}:$${matrixMesSubColLetter(m, MATRIX_SUB.PAGADO)})` },
     { label: "(+) Subarrendamiento Cobrado", formula: (m) => `SUMIFS(Subarrendamiento!$D:$D,Subarrendamiento!$B:$B,${m})` },
     { label: "= TOTAL INGRESOS",            subtotal: "ingresos" },
     { label: "(-) Gastos",                  formula: (m) => `SUMIFS(Gastos!$H:$H,Gastos!$B:$B,${m})` },
@@ -1163,8 +1322,8 @@ export async function generarExcelRespaldo(anio: number): Promise<Blob> {
   // Pestañas operativas
   pestPacientes(wb, pacientes);
   pestEmpleados(wb, empleados);
-  pestEventos(wb, anio, eventos, "citas");
-  pestEventos(wb, anio, eventos, "evaluaciones");
+  pestEventosMatriz(wb, anio, eventos, "citas");
+  pestEventosMatriz(wb, anio, eventos, "evaluaciones");
   pestSubarrendamiento(wb, anio, subarr);
   pestGastos(wb, anio, gastos);
   pestNomina(wb, anio, empleados, nomina);
