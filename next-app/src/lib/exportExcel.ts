@@ -90,7 +90,7 @@ function pestParametros(wb: ExcelJS.Workbook, params: ParamMap) {
   defs.forEach((d, i) => {
     const r = i + 2;
     ws.addRow([d.clave, d.valor, d.desc]);
-    wb.definedNames.add(d.named, `'Parámetros'!$B$${r}`);
+    wb.definedNames.add(`'Parámetros'!$B$${r}`, d.named);
   });
 
   autoFitCols(ws, [32, 14, 42]);
@@ -124,7 +124,7 @@ function pestTablas(wb: ExcelJS.Workbook) {
     ws.getRow(r).getCell(4).numFmt = "0.0000";
   });
   const lastIsrRow = TARIFA_ISR.length + 2;
-  wb.definedNames.add("TABLA_ISR", `'Tablas'!$A$3:$D$${lastIsrRow}`);
+  wb.definedNames.add(`'Tablas'!$A$3:$D$${lastIsrRow}`, "TABLA_ISR");
 
   // Tabla vacaciones LFT
   ws.addRow([]);
@@ -137,7 +137,7 @@ function pestTablas(wb: ExcelJS.Workbook) {
   });
   const vacStart = lastIsrRow + 4;
   const vacEnd = vacStart + TABLA_VACACIONES_LFT.length - 1;
-  wb.definedNames.add("TABLA_VAC", `'Tablas'!$A$${vacStart}:$B$${vacEnd}`);
+  wb.definedNames.add(`'Tablas'!$A$${vacStart}:$B$${vacEnd}`, "TABLA_VAC");
 
   autoFitCols(ws, [18, 18, 18, 12]);
 }
@@ -172,10 +172,10 @@ function pestPacientes(wb: ExcelJS.Workbook, pacientes: Paciente[]) {
   autoFitCols(ws, [28, 32, 18, 18, 10, 10, 10, 10, 12, 22, 30]);
   ws.views = [{ state: "frozen", ySplit: 1 }];
   // Nombre named range para usar como lookup
-  wb.definedNames.add("PACIENTES_ID", `'Pacientes'!$A$2:$A$${pacientes.length + 1}`);
-  wb.definedNames.add("PACIENTES_NOMBRE", `'Pacientes'!$B$2:$B$${pacientes.length + 1}`);
-  wb.definedNames.add("PACIENTES_PRECIO_REG", `'Pacientes'!$C$2:$C$${pacientes.length + 1}`);
-  wb.definedNames.add("PACIENTES_PRECIO_MAT", `'Pacientes'!$D$2:$D$${pacientes.length + 1}`);
+  wb.definedNames.add(`'Pacientes'!$A$2:$A$${pacientes.length + 1}`, "PACIENTES_ID");
+  wb.definedNames.add(`'Pacientes'!$B$2:$B$${pacientes.length + 1}`, "PACIENTES_NOMBRE");
+  wb.definedNames.add(`'Pacientes'!$C$2:$C$${pacientes.length + 1}`, "PACIENTES_PRECIO_REG");
+  wb.definedNames.add(`'Pacientes'!$D$2:$D$${pacientes.length + 1}`, "PACIENTES_PRECIO_MAT");
 }
 
 // ============================================================================
@@ -205,11 +205,11 @@ function pestEmpleados(wb: ExcelJS.Workbook, empleados: Empleado[]) {
 
   autoFitCols(ws, [28, 32, 22, 22, 22, 14, 12, 30]);
   ws.views = [{ state: "frozen", ySplit: 1 }];
-  wb.definedNames.add("EMPLEADOS_ID", `'Empleados'!$A$2:$A$${empleados.length + 1}`);
-  wb.definedNames.add("EMPLEADOS_NOMBRE", `'Empleados'!$B$2:$B$${empleados.length + 1}`);
-  wb.definedNames.add("EMPLEADOS_ST", `'Empleados'!$D$2:$D$${empleados.length + 1}`);
-  wb.definedNames.add("EMPLEADOS_SE", `'Empleados'!$E$2:$E$${empleados.length + 1}`);
-  wb.definedNames.add("EMPLEADOS_FECHA", `'Empleados'!$F$2:$F$${empleados.length + 1}`);
+  wb.definedNames.add(`'Empleados'!$A$2:$A$${empleados.length + 1}`, "EMPLEADOS_ID");
+  wb.definedNames.add(`'Empleados'!$B$2:$B$${empleados.length + 1}`, "EMPLEADOS_NOMBRE");
+  wb.definedNames.add(`'Empleados'!$D$2:$D$${empleados.length + 1}`, "EMPLEADOS_ST");
+  wb.definedNames.add(`'Empleados'!$E$2:$E$${empleados.length + 1}`, "EMPLEADOS_SE");
+  wb.definedNames.add(`'Empleados'!$F$2:$F$${empleados.length + 1}`, "EMPLEADOS_FECHA");
 }
 
 // ============================================================================
