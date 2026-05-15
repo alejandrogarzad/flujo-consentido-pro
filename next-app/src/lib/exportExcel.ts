@@ -639,74 +639,6 @@ function pestFlujoEfectivo(wb: ExcelJS.Workbook, anio: number) {
 }
 
 // ============================================================================
-// PESTAÑA: Cobranza Mensual (pivot Paciente × Mes — TODO lo cobrado)
-// ============================================================================
-
-function pestCobranzaMensual(
-  wb: ExcelJS.Workbook,
-  anio: number,
-  pacientes: Paciente[],
-) {
-  const ws = wb.addWorksheet("Cobranza Mensual", { properties: { tabColor: { argb: "FF22C55E" } } });
-  const MESES_CORTO = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-
-  // Título
-  ws.mergeCells("A1:N1");
-  const t1 = ws.getCell("A1");
-  t1.value = `Cobranza ${anio} — cuánto pagó cada paciente cada mes (terapias + citas + evaluaciones)`;
-  t1.font = { bold: true, size: 14, color: { argb: "FF000000" } };
-  t1.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_MES_HEADER } };
-  t1.alignment = { horizontal: "center", vertical: "middle" };
-  t1.border = {
-    top: { style: "medium", color: { argb: COLOR_BORDE } },
-    bottom: { style: "medium", color: { argb: COLOR_BORDE } },
-    left: { style: "medium", color: { argb: COLOR_BORDE } },
-    right: { style: "medium", color: { argb: COLOR_BORDE } },
-  };
-  ws.getRow(1).height = 30;
-
-  ws.addRow([]);
-  ws.addRow(["Paciente", ...MESES_CORTO, "Total Año"]);
-  applyHeader(ws, 3, [{}, ...new Array(13).fill({ calc: true })]);
-
-  pacientes.forEach((p, i) => {
-    const r = 4 + i;
-    const nombreEscaped = p.nombre.replace(/"/g, '""');
-    const values: (string | number | { formula: string })[] = [p.nombre];
-    for (let m = 1; m <= 12; m++) {
-      // Terapias en layout matriz: paciente en col C, Pagado del mes m en columna calculada
-      const colPag = matrixMesSubColLetter(m, MATRIX_SUB.PAGADO);
-      const fxTerapias = `SUMIFS(Terapias!$${colPag}:$${colPag},Terapias!$C:$C,"${nombreEscaped}")`;
-      const fxCitas = `SUMIFS(Citas!$H:$H,Citas!$C:$C,"${nombreEscaped}",Citas!$A:$A,">="&DATE(${anio},${m},1),Citas!$A:$A,"<"&DATE(${anio},${m + 1},1))`;
-      const fxEval = `SUMIFS(Evaluaciones!$H:$H,Evaluaciones!$C:$C,"${nombreEscaped}",Evaluaciones!$A:$A,">="&DATE(${anio},${m},1),Evaluaciones!$A:$A,"<"&DATE(${anio},${m + 1},1))`;
-      values.push({ formula: `(${fxTerapias})+(${fxCitas})+(${fxEval})` });
-    }
-    values.push({ formula: `SUM(B${r}:M${r})` });
-    const row = ws.addRow(values);
-    for (let c = 2; c <= 14; c++) moneyFmt(row.getCell(c));
-    // Negrita en columna Total
-    row.getCell(14).font = { bold: true };
-  });
-
-  // Fila de TOTAL del mes (suma de todos los pacientes)
-  if (pacientes.length > 0) {
-    const last = pacientes.length + 3;
-    const totalValues: (string | { formula: string })[] = ["TOTAL DEL MES"];
-    for (let m = 1; m <= 12; m++) {
-      const col = String.fromCharCode(65 + m); // B..M
-      totalValues.push({ formula: `SUM(${col}4:${col}${last})` });
-    }
-    totalValues.push({ formula: `SUM(B${last + 1}:M${last + 1})` });
-    totalRow(ws, totalValues, Array.from({ length: 13 }, (_, i) => i + 2));
-  }
-
-  setWidths(ws, [32, ...new Array(12).fill(11), 13]);
-  ws.views = [{ state: "frozen", ySplit: 3, xSplit: 1 }];
-  // Auto-filter sobre encabezado para que el usuario pueda filtrar pacientes
-  ws.autoFilter = `A3:N3`;
-}
-
-// ============================================================================
 // PESTAÑA: Terapias (Paciente × Mes × 8 sub-cols)
 //
 // REPLICA EXACTA del archivo "Consentido Analisis Datos 2026.xlsx", hoja Terapias:
@@ -1019,14 +951,60 @@ function pestParaContador(
   pagos: PagoTerapia[],
   eventos: Evento[],
   subarr: Subarrendamiento[],
+  paramsMap: ParamMap,
 ) {
   const ws = wb.addWorksheet("Para el Contador", { properties: { tabColor: { argb: "FFFBBF24" } } });
   const MESES_CORTO = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  const iva = Number(paramsMap.iva ?? 0.16);
+  const FORMAS_FACT = new Set(["Transferencia", "Tarjeta", "Depósito"]);
 
-  // Título + instrucciones
+  // ----- Calcular cliente × mes con cifras LITERALES (no fórmulas SUMIFS) -----
+  //
+  // Calcular directo desde los datos crudos es más confiable que SUMIFS sobre
+  // la matriz Terapias: si un paciente recibió pagos mixtos (parte efectivo,
+  // parte transferencia) en el mismo mes, la matriz solo guarda el total —
+  // SUMIFS sumaría todo (incluyendo el efectivo). Aquí separamos por forma y
+  // solo contamos lo facturable.
+  //
+  // Convención de IVA en BD:
+  //   - pago_terapia.monto_pagado: ya incluye IVA si fue transferencia.
+  //   - evento.monto_pagado:       SIN IVA → multiplicar por (1+IVA).
+  //   - subarrendamiento.monto:    ya incluye IVA.
+  const pacMap = new Map(pacientes.map((p) => [p.id, p.nombre]));
+  const matriz = new Map<string, number[]>(); // cliente → [mes1..mes12]
+  const add = (cliente: string, mes: number, monto: number) => {
+    if (!cliente || !mes || mes < 1 || mes > 12 || monto <= 0) return;
+    if (!matriz.has(cliente)) matriz.set(cliente, new Array(12).fill(0));
+    matriz.get(cliente)![mes - 1] += monto;
+  };
+
+  for (const p of pagos) {
+    if (p.anio !== anio) continue;
+    if (!FORMAS_FACT.has(p.forma_pago)) continue;
+    const monto = Number(p.monto_pagado ?? 0);
+    if (monto <= 0) continue;
+    const nombre = pacMap.get(p.paciente_id) || p.paciente_nombre || "(sin nombre)";
+    add(nombre, p.mes, monto);
+  }
+  for (const ev of eventos) {
+    if (!ev.fecha?.startsWith(String(anio))) continue;
+    if (!FORMAS_FACT.has(ev.forma_pago)) continue;
+    const monto = Number(ev.monto_pagado ?? 0);
+    if (monto <= 0) continue;
+    const mes = Number(ev.fecha.slice(5, 7));
+    add(ev.nombre_paciente || "(sin nombre)", mes, monto * (1 + iva));
+  }
+  for (const s of subarr) {
+    if (s.anio !== anio || !FORMAS_FACT.has(s.forma_pago)) continue;
+    const monto = Number(s.monto_cobrado ?? 0);
+    if (monto <= 0) continue;
+    add(s.inquilino, s.mes, monto);
+  }
+
+  // ----- Render -----
   ws.mergeCells("A1:N1");
   const c1 = ws.getCell("A1");
-  c1.value = `Facturas ${anio} — clientes con cobro por transferencia / tarjeta / depósito`;
+  c1.value = `Para el Contador — ${anio}`;
   c1.font = { bold: true, size: 14, color: { argb: "FF000000" } };
   c1.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_MES_HEADER } };
   c1.alignment = { horizontal: "center", vertical: "middle" };
@@ -1040,129 +1018,43 @@ function pestParaContador(
 
   ws.mergeCells("A2:N2");
   const c2 = ws.getCell("A2");
-  c2.value = "Cada celda muestra el monto TOTAL CON IVA cobrado al cliente en ese mes (solo cobros NO efectivo). Si la celda está vacía, no hubo cobro facturable.";
+  c2.value = "Monto TOTAL CON IVA cobrado por transferencia / tarjeta / depósito (lo que hay que facturar). Sin efectivo.";
   c2.font = { italic: true, color: { argb: "FF7F7F7F" }, size: 10 };
   c2.alignment = { horizontal: "center", wrapText: true };
-  ws.getRow(2).height = 28;
+  ws.getRow(2).height = 22;
 
   ws.addRow([]);
   ws.addRow(["Cliente", ...MESES_CORTO, "Total Año"]);
   applyHeader(ws, 4, [{}, ...new Array(13).fill({ calc: true })]);
 
-  // Construir set único de clientes (terapias + eventos + subarrendamiento) que tengan AL MENOS 1 cobro facturable
-  const FORMAS_FACT = new Set(["Transferencia", "Tarjeta", "Depósito"]);
-  const pacMap = new Map(pacientes.map((p) => [p.id, p]));
-  const clientes = new Set<string>();
-
-  for (const p of pagos.filter((p) => p.anio === anio && FORMAS_FACT.has(p.forma_pago))) {
-    const nombre = pacMap.get(p.paciente_id)?.nombre || p.paciente_nombre;
-    if (nombre) clientes.add(nombre);
-  }
-  for (const ev of eventos) {
-    if (!ev.fecha?.startsWith(String(anio))) continue;
-    if (!FORMAS_FACT.has(ev.forma_pago)) continue;
-    if (!ev.monto_pagado || ev.monto_pagado <= 0) continue;
-    if (ev.nombre_paciente) clientes.add(ev.nombre_paciente);
-  }
-  for (const s of subarr) {
-    if (s.anio !== anio || !FORMAS_FACT.has(s.forma_pago)) continue;
-    if (!s.monto_cobrado || s.monto_cobrado <= 0) continue;
-    clientes.add(s.inquilino);
-  }
-
-  const clientesOrdenados = Array.from(clientes).sort((a, b) => a.localeCompare(b));
+  const clientesOrdenados = Array.from(matriz.keys()).sort((a, b) => a.localeCompare(b));
 
   clientesOrdenados.forEach((cliente, i) => {
-    const r = 5 + i;
-    const esc = cliente.replace(/"/g, '""');
-    const values: (string | { formula: string })[] = [cliente];
-    for (let m = 1; m <= 12; m++) {
-      // Terapias en layout matriz: paciente en col C, Pagado en col del mes m sub 6, Forma en col del mes m sub 0 (E=Efectivo, T=otro)
-      const colPag = matrixMesSubColLetter(m, MATRIX_SUB.PAGADO);
-      const colFma = matrixMesSubColLetter(m, MATRIX_SUB.EFVO);
-      const fxTerapias = `SUMIFS(Terapias!$${colPag}:$${colPag},Terapias!$C:$C,"${esc}",Terapias!$${colFma}:$${colFma},"T")`;
-      const fxCitas = `SUMIFS(Citas!$H:$H,Citas!$C:$C,"${esc}",Citas!$A:$A,">="&DATE(${anio},${m},1),Citas!$A:$A,"<"&DATE(${anio},${m + 1},1),Citas!$D:$D,"<>Efectivo")*(1+IVA)`;
-      const fxEval = `SUMIFS(Evaluaciones!$H:$H,Evaluaciones!$C:$C,"${esc}",Evaluaciones!$A:$A,">="&DATE(${anio},${m},1),Evaluaciones!$A:$A,"<"&DATE(${anio},${m + 1},1),Evaluaciones!$D:$D,"<>Efectivo")*(1+IVA)`;
-      const fxSubarr = `SUMIFS(Subarrendamiento!$D:$D,Subarrendamiento!$A:$A,"${esc}",Subarrendamiento!$B:$B,${m},Subarrendamiento!$C:$C,"<>Efectivo")`;
-      values.push({ formula: `(${fxTerapias})+(${fxCitas})+(${fxEval})+(${fxSubarr})` });
-    }
-    values.push({ formula: `SUM(B${r}:M${r})` });
+    const meses = matriz.get(cliente)!;
+    const totalAnio = meses.reduce((s, v) => s + v, 0);
+    const values: (string | number)[] = [cliente];
+    for (let m = 0; m < 12; m++) values.push(meses[m] || 0);
+    values.push(totalAnio);
     const row = ws.addRow(values);
     for (let c = 2; c <= 14; c++) moneyFmt(row.getCell(c));
     row.getCell(14).font = { bold: true };
+    void i;
   });
 
-  // Fila TOTAL del mes
+  // Fila TOTAL DEL MES (suma columnar literal)
   if (clientesOrdenados.length > 0) {
-    const last = clientesOrdenados.length + 4;
-    const totalValues: (string | { formula: string })[] = ["TOTAL DEL MES"];
-    for (let m = 1; m <= 12; m++) {
-      const col = String.fromCharCode(65 + m);
-      totalValues.push({ formula: `SUM(${col}5:${col}${last})` });
+    const totales = new Array(12).fill(0);
+    for (const meses of matriz.values()) {
+      meses.forEach((v, i) => { totales[i] += v; });
     }
-    totalValues.push({ formula: `SUM(B${last + 1}:M${last + 1})` });
+    const totalAnio = totales.reduce((s, v) => s + v, 0);
+    const totalValues: (string | number)[] = ["TOTAL DEL MES", ...totales, totalAnio];
     totalRow(ws, totalValues, Array.from({ length: 13 }, (_, i) => i + 2));
   }
 
   setWidths(ws, [32, ...new Array(12).fill(11), 13]);
   ws.views = [{ state: "frozen", ySplit: 4, xSplit: 1 }];
   ws.autoFilter = `A4:N4`;
-}
-
-// ============================================================================
-// PESTAÑA: Gastos por Categoría (pivot Categoría × Mes)
-// ============================================================================
-
-function pestGastosCategoria(wb: ExcelJS.Workbook, anio: number) {
-  const ws = wb.addWorksheet("Gastos por Categoría", { properties: { tabColor: { argb: "FFEF4444" } } });
-  const MESES_CORTO = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-  const CATEGORIAS = [
-    "Renta", "Materiales Centro", "Materiales Limpieza", "Comidas", "Servicios",
-    "Renta Terapeutas", "Capacitaciones", "Nómina", "Impuestos", "Otros",
-  ];
-
-  ws.mergeCells("A1:N1");
-  const g1 = ws.getCell("A1");
-  g1.value = `Gastos ${anio} — por categoría y mes`;
-  g1.font = { bold: true, size: 14, color: { argb: "FF000000" } };
-  g1.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_MES_HEADER } };
-  g1.alignment = { horizontal: "center", vertical: "middle" };
-  g1.border = {
-    top: { style: "medium", color: { argb: COLOR_BORDE } },
-    bottom: { style: "medium", color: { argb: COLOR_BORDE } },
-    left: { style: "medium", color: { argb: COLOR_BORDE } },
-    right: { style: "medium", color: { argb: COLOR_BORDE } },
-  };
-  ws.getRow(1).height = 30;
-
-  ws.addRow([]);
-  ws.addRow(["Categoría", ...MESES_CORTO, "Total Año"]);
-  applyHeader(ws, 3, [{}, ...new Array(13).fill({ calc: true })]);
-
-  CATEGORIAS.forEach((cat, i) => {
-    const r = 4 + i;
-    const values: (string | { formula: string })[] = [cat];
-    for (let m = 1; m <= 12; m++) {
-      values.push({ formula: `SUMIFS(Gastos!$H:$H,Gastos!$C:$C,"${cat}",Gastos!$B:$B,${m})` });
-    }
-    values.push({ formula: `SUM(B${r}:M${r})` });
-    const row = ws.addRow(values);
-    for (let c = 2; c <= 14; c++) moneyFmt(row.getCell(c));
-    row.getCell(14).font = { bold: true };
-  });
-
-  // Total mes (suma de todas las categorías)
-  const lastCat = CATEGORIAS.length + 3;
-  const totalValues: (string | { formula: string })[] = ["TOTAL DEL MES"];
-  for (let m = 1; m <= 12; m++) {
-    const col = String.fromCharCode(65 + m);
-    totalValues.push({ formula: `SUM(${col}4:${col}${lastCat})` });
-  }
-  totalValues.push({ formula: `SUM(B${lastCat + 1}:M${lastCat + 1})` });
-  totalRow(ws, totalValues, Array.from({ length: 13 }, (_, i) => i + 2));
-
-  setWidths(ws, [22, ...new Array(12).fill(11), 13]);
-  ws.views = [{ state: "frozen", ySplit: 3, xSplit: 1 }];
 }
 
 // ============================================================================
@@ -1237,67 +1129,6 @@ function pestTablas(wb: ExcelJS.Workbook) {
 // ============================================================================
 // 13. PESTAÑA: Cómo usar este Excel
 // ============================================================================
-
-function pestComoUsar(wb: ExcelJS.Workbook, anio: number) {
-  const ws = wb.addWorksheet("Cómo usar", { properties: { tabColor: { argb: "FF6D28D9" } } });
-  ws.getColumn(1).width = 100;
-
-  const addH = (text: string, size = 14) => {
-    const row = ws.addRow([text]);
-    row.font = { bold: true, size };
-    row.height = size + 8;
-  };
-  const addP = (text: string, italic = false) => {
-    const row = ws.addRow([text]);
-    row.font = { italic, color: italic ? { argb: "FF6B7280" } : undefined };
-    row.alignment = { wrapText: true, vertical: "top" };
-    row.height = 18;
-  };
-
-  addH(`Respaldo Flujo Consentido — Año ${anio}`, 16);
-  addP(`Generado ${new Date().toLocaleString("es-MX")}`, true);
-  ws.addRow([]);
-
-  addH("¿Cómo está organizado?", 12);
-  addP("Las pestañas se ordenan en 3 bloques:");
-  addP("");
-  addP("  📝 EDITABLES (donde haces cambios): Pacientes, Empleados, Terapias, Citas, Evaluaciones, Subarrendamiento, Gastos, Nómina");
-  addP("  📊 RESÚMENES (calculados automáticamente): Flujo de Efectivo, Para el Contador");
-  addP("  ⚙️ CONFIG (rara vez se toca): Parámetros, Tablas");
-  ws.addRow([]);
-
-  addH("Colores", 12);
-  addP("  🟣 Header MORADO = columna donde puedes escribir / editar");
-  addP("  ⬜ Header GRIS = columna calculada con fórmula (NO escribir, se recalcula sola)");
-  addP("  🟡 Fila TOTAL amarilla = suma de las filas de arriba");
-  ws.addRow([]);
-
-  addH("Cómo se recalcula", 12);
-  addP("• Cambia el IVA en pestaña Parámetros → TODAS las pestañas recalculan IVA y totales");
-  addP("• Cambia el precio global en Parámetros → Terapias recalcula totales (de quienes usan precio global)");
-  addP("• Cambia las sesiones de un paciente en Terapias → Subtotal/IVA/Total/Saldo se recalculan");
-  addP("• Cambia la forma de pago de un cobro → IVA se activa o se quita automáticamente");
-  addP("• Cambia el sueldo de un empleado en Nómina → IMSS, ISN, ISR, Infonavit, Total Costo recalculan");
-  ws.addRow([]);
-
-  addH("Flujo de trabajo con cambios", 12);
-  addP("1) Abres este Excel y ves los datos actuales de la app.");
-  addP("2) Si quieres explorar 'qué pasa si...' (cambiar precios, agregar pacientes, etc), edita las celdas moradas y verás cómo afectan totales y flujo.");
-  addP("3) Si decides que los cambios son los correctos, manda el Excel y pídele a Claude que actualice la app en la BD para reflejarlos.");
-  ws.addRow([]);
-
-  addH("Para el contador", 12);
-  addP("• Abre la pestaña 'Para el Contador'.");
-  addP("• Usa el filtro de la columna 'Forma de Pago' y selecciona Transferencia / Tarjeta / Depósito.");
-  addP("• Esa lista filtrada es exactamente la que necesita facturar (con Subtotal sin IVA, IVA, Total).");
-  ws.addRow([]);
-
-  addH("Limitaciones", 12);
-  addP("• IMSS Patronal e ISR Retenido en Nómina usan aproximación lineal (~95% exacto). La app usa gross-up iterativo más preciso. Si necesitas el número exacto al peso, consulta la app /nomina.", true);
-  addP("• Cambios en este Excel NO afectan la app. Para que reflejen, hay que actualizar la BD desde la web (o pedirle a Claude que lo haga).", true);
-}
-
-// ============================================================================
 // EXPORT PRINCIPAL
 // ============================================================================
 
@@ -1326,48 +1157,46 @@ export async function generarExcelRespaldo(anio: number): Promise<Blob> {
   pestParametros(wb, paramsMap);
   pestTablas(wb);
 
-  // Terapias debe construirse antes que las hojas que la referencian
-  // (Cobranza Mensual, Para el Contador, Flujo de Efectivo) porque sus SUMIFS
-  // apuntan a las columnas del layout matriz.
+  // Terapias antes que Flujo (sus SUMIFS apuntan a la matriz)
   pestTerapias(wb, anio, pacientes, sesiones, pagos, paramsMap);
 
-  // Editables
+  // Pestañas operativas
   pestPacientes(wb, pacientes);
-  pestCobranzaMensual(wb, anio, pacientes);
   pestEmpleados(wb, empleados);
   pestEventos(wb, anio, eventos, "citas");
   pestEventos(wb, anio, eventos, "evaluaciones");
   pestSubarrendamiento(wb, anio, subarr);
   pestGastos(wb, anio, gastos);
-  pestGastosCategoria(wb, anio);
   pestNomina(wb, anio, empleados, nomina);
 
   // Resúmenes
   pestFlujoEfectivo(wb, anio);
-  pestParaContador(wb, anio, pacientes, pagos, eventos, subarr);
+  pestParaContador(wb, anio, pacientes, pagos, eventos, subarr, paramsMap);
 
-  // Cómo usar
-  pestComoUsar(wb, anio);
-
-  // Reordenar: editables primero, resúmenes después, config al final
+  // Reordenar: lo más usado primero, config al final
   const ws = wb.worksheets;
   const reordered = [
     "Pacientes",
     "Terapias",
-    "Cobranza Mensual",
-    "Empleados",
-    "Citas", "Evaluaciones",
+    "Citas",
+    "Evaluaciones",
     "Subarrendamiento",
-    "Gastos", "Gastos por Categoría",
+    "Gastos",
+    "Empleados",
     "Nómina",
-    "Flujo de Efectivo", "Para el Contador",
-    "Cómo usar",
-    "Parámetros", "Tablas",
+    "Flujo de Efectivo",
+    "Para el Contador",
+    "Parámetros",
+    "Tablas",
   ];
   reordered.forEach((name, idx) => {
     const sheet = ws.find((s) => s.name === name) as (ExcelJS.Worksheet & { orderNo?: number }) | undefined;
     if (sheet) sheet.orderNo = idx;
   });
+
+  // Tablas es solo soporte de fórmulas — oculta del usuario
+  const tablas = ws.find((s) => s.name === "Tablas");
+  if (tablas) tablas.state = "hidden";
 
   const buffer = await wb.xlsx.writeBuffer();
   return new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
