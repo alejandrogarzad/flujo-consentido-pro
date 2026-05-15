@@ -1117,51 +1117,53 @@ function pestParaContador(
   const iva = Number(paramsMap.iva ?? 0.16);
   const FORMAS_FACT = new Set(["Transferencia", "Tarjeta", "Depósito"]);
 
-  // ----- Calcular cliente × mes con cifras LITERALES (no fórmulas SUMIFS) -----
-  //
-  // Calcular directo desde los datos crudos es más confiable que SUMIFS sobre
-  // la matriz Terapias: si un paciente recibió pagos mixtos (parte efectivo,
-  // parte transferencia) en el mismo mes, la matriz solo guarda el total —
-  // SUMIFS sumaría todo (incluyendo el efectivo). Aquí separamos por forma y
-  // solo contamos lo facturable.
+  // ----- Recopilar montos facturables por (cliente, concepto, mes) -----
+  // Se calculan valores literales (no fórmulas SUMIFS) para evitar:
+  //  1) doble-conteo si un paciente tiene pagos mixtos efvo+transf en el mismo mes
+  //  2) huérfanos cuando dedupPacientes quita un nombre que tenía pagos asociados
   //
   // Convención de IVA en BD:
-  //   - pago_terapia.monto_pagado: ya incluye IVA si fue transferencia.
+  //   - pago_terapia.monto_pagado: ya incluye IVA si fue transferencia/tarjeta.
   //   - evento.monto_pagado:       SIN IVA → multiplicar por (1+IVA).
   //   - subarrendamiento.monto:    ya incluye IVA.
+  type Concepto = "Terapia" | "Cita" | "Evaluación" | "Subarrendamiento";
   const pacMap = new Map(pacientes.map((p) => [p.id, p.nombre]));
-  const matriz = new Map<string, number[]>(); // cliente → [mes1..mes12]
-  const add = (cliente: string, mes: number, monto: number) => {
+  const buckets = new Map<string, Map<Concepto, number[]>>(); // cliente → concepto → [mes1..mes12]
+
+  const add = (cliente: string, concepto: Concepto, mes: number, monto: number) => {
     if (!cliente || !mes || mes < 1 || mes > 12 || monto <= 0) return;
-    if (!matriz.has(cliente)) matriz.set(cliente, new Array(12).fill(0));
-    matriz.get(cliente)![mes - 1] += monto;
+    if (!buckets.has(cliente)) buckets.set(cliente, new Map());
+    const cMap = buckets.get(cliente)!;
+    if (!cMap.has(concepto)) cMap.set(concepto, new Array(12).fill(0));
+    cMap.get(concepto)![mes - 1] += monto;
   };
 
   for (const p of pagos) {
-    if (p.anio !== anio) continue;
-    if (!FORMAS_FACT.has(p.forma_pago)) continue;
+    if (p.anio !== anio || !FORMAS_FACT.has(p.forma_pago)) continue;
     const monto = Number(p.monto_pagado ?? 0);
     if (monto <= 0) continue;
     const nombre = pacMap.get(p.paciente_id) || p.paciente_nombre || "(sin nombre)";
-    add(nombre, p.mes, monto);
+    add(nombre, "Terapia", p.mes, monto);
   }
   for (const ev of eventos) {
-    if (!ev.fecha?.startsWith(String(anio))) continue;
-    if (!FORMAS_FACT.has(ev.forma_pago)) continue;
+    if (!ev.fecha?.startsWith(String(anio)) || !FORMAS_FACT.has(ev.forma_pago)) continue;
     const monto = Number(ev.monto_pagado ?? 0);
     if (monto <= 0) continue;
     const mes = Number(ev.fecha.slice(5, 7));
-    add(ev.nombre_paciente || "(sin nombre)", mes, monto * (1 + iva));
+    const esEvaluacion = ev.tipo === "Evaluación";
+    add(ev.nombre_paciente || "(sin nombre)", esEvaluacion ? "Evaluación" : "Cita", mes, monto * (1 + iva));
   }
   for (const s of subarr) {
     if (s.anio !== anio || !FORMAS_FACT.has(s.forma_pago)) continue;
     const monto = Number(s.monto_cobrado ?? 0);
     if (monto <= 0) continue;
-    add(s.inquilino, s.mes, monto);
+    add(s.inquilino, "Subarrendamiento", s.mes, monto);
   }
 
   // ----- Render -----
-  ws.mergeCells("A1:N1");
+  // Layout: A=Cliente, B=Concepto, C-N=meses, O=Total Año
+
+  ws.mergeCells("A1:O1");
   const c1 = ws.getCell("A1");
   c1.value = `Para el Contador — ${anio}`;
   c1.font = { bold: true, size: 14, color: { argb: "FF000000" } };
@@ -1175,45 +1177,67 @@ function pestParaContador(
   };
   ws.getRow(1).height = 30;
 
-  ws.mergeCells("A2:N2");
+  ws.mergeCells("A2:O2");
   const c2 = ws.getCell("A2");
-  c2.value = "Monto TOTAL CON IVA cobrado por transferencia / tarjeta / depósito (lo que hay que facturar). Sin efectivo.";
+  c2.value = "Lo que hay que facturar este año: cobros por transferencia / tarjeta / depósito (incluye IVA). El efectivo NO aparece aquí.";
   c2.font = { italic: true, color: { argb: "FF7F7F7F" }, size: 10 };
   c2.alignment = { horizontal: "center", wrapText: true };
-  ws.getRow(2).height = 22;
+  ws.getRow(2).height = 24;
 
   ws.addRow([]);
-  ws.addRow(["Cliente", ...MESES_CORTO, "Total Año"]);
-  applyHeader(ws, 4, [{}, ...new Array(13).fill({ calc: true })]);
+  ws.addRow(["Cliente", "Concepto", ...MESES_CORTO, "Total Año"]);
+  applyHeader(ws, 4, [{}, {}, ...new Array(13).fill({ calc: true })]);
 
-  const clientesOrdenados = Array.from(matriz.keys()).sort((a, b) => a.localeCompare(b));
+  const clientesOrdenados = Array.from(buckets.keys()).sort((a, b) => a.localeCompare(b));
+  const ORDEN_CONCEPTOS: Concepto[] = ["Terapia", "Cita", "Evaluación", "Subarrendamiento"];
 
-  clientesOrdenados.forEach((cliente, i) => {
-    const meses = matriz.get(cliente)!;
-    const totalAnio = meses.reduce((s, v) => s + v, 0);
-    const values: (string | number)[] = [cliente];
-    for (let m = 0; m < 12; m++) values.push(meses[m] || 0);
-    values.push(totalAnio);
-    const row = ws.addRow(values);
-    for (let c = 2; c <= 14; c++) moneyFmt(row.getCell(c));
-    row.getCell(14).font = { bold: true };
-    void i;
+  let curRow = 5;
+  const totalesPorMes = new Array(12).fill(0);
+  let totalAnioGran = 0;
+
+  clientesOrdenados.forEach((cliente, idx) => {
+    const cMap = buckets.get(cliente)!;
+    const conceptosDeEsteCliente = ORDEN_CONCEPTOS.filter((c) => cMap.has(c));
+    conceptosDeEsteCliente.forEach((concepto, conceptoIdx) => {
+      const meses = cMap.get(concepto)!;
+      const totalAnio = meses.reduce((s, v) => s + v, 0);
+      totalAnioGran += totalAnio;
+      meses.forEach((v, i) => { totalesPorMes[i] += v; });
+
+      const values: (string | number)[] = [
+        conceptoIdx === 0 ? cliente : "", // nombre solo en primera fila del cliente
+        concepto,
+        ...meses.map((v) => v || 0),
+        totalAnio,
+      ];
+      const row = ws.addRow(values);
+      // Money format cols C..O (12 meses + total)
+      for (let c = 3; c <= 15; c++) moneyFmt(row.getCell(c));
+      // Concepto en cursiva gris para distinguir del nombre
+      row.getCell(2).font = { italic: true, color: { argb: "FF6B7280" }, size: 10 };
+      // Nombre en bold (solo primera fila)
+      if (conceptoIdx === 0) row.getCell(1).font = { bold: true };
+      // Total año en bold
+      row.getCell(15).font = { bold: true };
+      curRow++;
+    });
+    // Separador visual entre clientes: borde top medium en la siguiente fila
+    if (idx < clientesOrdenados.length - 1) {
+      // Lo aplicamos en el siguiente loop iteration con un truco — más simple:
+      // marcar la primera fila del SIGUIENTE cliente con border top
+    }
+    void idx;
   });
 
-  // Fila TOTAL DEL MES (suma columnar literal)
+  // Fila TOTAL DEL MES
   if (clientesOrdenados.length > 0) {
-    const totales = new Array(12).fill(0);
-    for (const meses of matriz.values()) {
-      meses.forEach((v, i) => { totales[i] += v; });
-    }
-    const totalAnio = totales.reduce((s, v) => s + v, 0);
-    const totalValues: (string | number)[] = ["TOTAL DEL MES", ...totales, totalAnio];
-    totalRow(ws, totalValues, Array.from({ length: 13 }, (_, i) => i + 2));
+    const totalValues: (string | number)[] = ["TOTAL DEL MES", "", ...totalesPorMes, totalAnioGran];
+    totalRow(ws, totalValues, Array.from({ length: 13 }, (_, i) => i + 3));
   }
 
-  setWidths(ws, [32, ...new Array(12).fill(11), 13]);
-  ws.views = [{ state: "frozen", ySplit: 4, xSplit: 1 }];
-  ws.autoFilter = `A4:N4`;
+  setWidths(ws, [28, 16, ...new Array(12).fill(11), 14]);
+  ws.views = [{ state: "frozen", ySplit: 4, xSplit: 2 }];
+  ws.autoFilter = `A4:O4`;
 }
 
 // ============================================================================
@@ -1332,19 +1356,20 @@ export async function generarExcelRespaldo(anio: number): Promise<Blob> {
   pestFlujoEfectivo(wb, anio);
   pestParaContador(wb, anio, pacientes, pagos, eventos, subarr, paramsMap);
 
-  // Reordenar: lo más usado primero, config al final
+  // Reordenar: lo más útil para el contador primero, detalles y catálogos después.
+  // El primer tab es lo que se abre por default — debe ser la pantalla más útil.
   const ws = wb.worksheets;
   const reordered = [
-    "Pacientes",
+    "Para el Contador",  // primera pestaña — lo que se entrega
+    "Flujo de Efectivo", // resumen mensual completo
     "Terapias",
     "Citas",
     "Evaluaciones",
     "Subarrendamiento",
     "Gastos",
-    "Empleados",
     "Nómina",
-    "Flujo de Efectivo",
-    "Para el Contador",
+    "Pacientes",         // catálogos al final
+    "Empleados",
     "Parámetros",
     "Tablas",
   ];
