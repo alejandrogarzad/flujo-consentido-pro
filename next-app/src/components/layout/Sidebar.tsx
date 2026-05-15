@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Users, UserCog, CreditCard, Receipt, Building2,
   Wallet, BarChart3, FileText, TrendingUp, Settings, LogOut, ChevronRight,
-  Menu, X, Calendar, Calculator, CalendarDays, Loader2,
+  Menu, X, Calendar, Calculator, CalendarDays, Loader2, Download,
 } from "lucide-react";
 import { db, type AuthUser } from "@/lib/db";
 import { canAccess } from "@/lib/permissions";
@@ -28,6 +28,7 @@ const NAV_ITEMS = [
   { path: "/resumen-ingresos", label: "Resumen de Ingresos", icon: TrendingUp },
   { path: "/para-contador", label: "Para el Contador", icon: Calculator },
   { path: "/parametros", label: "Parámetros", icon: Settings },
+  { path: "/respaldo", label: "Respaldo / Exportar", icon: Download },
   { path: "/usuarios", label: "Usuarios", icon: UserCog },
 ] as const;
 
