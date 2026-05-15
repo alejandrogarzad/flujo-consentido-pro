@@ -149,6 +149,43 @@ function dedupSesiones(sesiones: SesionMensual[]): SesionMensual[] {
   return Array.from(map.values());
 }
 
+// ----------- Helpers de columnas en el layout matriz (Terapias) -----------
+//
+// Layout matriz (replica del archivo de referencia del usuario):
+//   col 1 (A): decorativa
+//   col 2 (B): número secuencial
+//   col 3 (C): nombre paciente
+//   col 4 (D): gap
+//   col 5..12 (E-L): mes 1 sub-cols (Efvo, Ter, %beca, Horas, Precio/Hr, Ingreso, Pagado, Saldo)
+//   col 13 (M): gap
+//   col 14..21 (N-U): mes 2
+//   ... cada mes ocupa 8 cols + 1 gap
+
+// Devuelve la letra de columna Excel para el índice 1-basado.
+function excelColLetter(n: number): string {
+  let s = "";
+  let i = n;
+  while (i > 0) {
+    const mod = (i - 1) % 26;
+    s = String.fromCharCode(65 + mod) + s;
+    i = Math.floor((i - 1) / 26);
+  }
+  return s;
+}
+
+// Col inicial del mes m (1..12) en el layout matriz.
+function matrixMesStartCol(m: number): number {
+  return 5 + (m - 1) * 9;
+}
+
+// Letra Excel para una sub-col del mes m (subIdx 0..7).
+function matrixMesSubColLetter(m: number, subIdx: number): string {
+  return excelColLetter(matrixMesStartCol(m) + subIdx);
+}
+
+// Sub-col indices: 0=Efvo, 1=Ter, 2=%beca, 3=Horas, 4=Precio/Hr, 5=Ingreso, 6=Pagado, 7=Saldo
+const MATRIX_SUB = { EFVO: 0, TER: 1, BECA: 2, HORAS: 3, PRECIO: 4, INGRESO: 5, PAGADO: 6, SALDO: 7 } as const;
+
 // ============================================================================
 // 1. PESTAÑA: Pacientes
 // ============================================================================
@@ -236,132 +273,6 @@ function pestEmpleados(wb: ExcelJS.Workbook, empleados: Empleado[]) {
 
   setWidths(ws, [32, 18, 18, 16, 14, 14, 10, 30]);
   ws.views = [{ state: "frozen", ySplit: 1 }];
-}
-
-// ============================================================================
-// 3. PESTAÑA: Terapias (cobranza por paciente × mes)
-// ============================================================================
-
-function pestTerapias(
-  wb: ExcelJS.Workbook,
-  anio: number,
-  pacientes: Paciente[],
-  sesiones: SesionMensual[],
-  pagos: PagoTerapia[],
-  paramsMap: ParamMap,
-) {
-  const ws = wb.addWorksheet("Terapias", { properties: { tabColor: { argb: "FFF59E0B" } } });
-
-  // Estructura: 10 columnas, agrupado visualmente por paciente
-  ws.addRow([
-    "Paciente", "Mes", "Sesiones", "Precio", "Subtotal",
-    "Forma de Pago", "IVA", "Total Esperado", "Pagado", "Saldo",
-  ]);
-  applyHeader(ws, 1, [
-    {}, {}, {}, {}, { calc: true },
-    {}, { calc: true }, { calc: true }, {}, { calc: true },
-  ]);
-
-  // Dedup y ordenar por (paciente, mes)
-  const sesionesDedup = dedupSesiones(sesiones.filter((s) => s.anio === anio));
-  const pacMap = new Map(pacientes.map((p) => [p.id, p]));
-  const filas: Array<{ pac: Paciente; mes: number; s: SesionMensual; pagado: number; precio: number; sesiones: number }> = [];
-
-  const precioGlobalReg = Number(paramsMap.precio_terapia_regular ?? 1100);
-  const precioGlobalMat = Number(paramsMap.precio_terapia_matutina ?? 900);
-
-  for (const s of sesionesDedup) {
-    const pac = pacMap.get(s.paciente_id);
-    if (!pac) continue;
-    const pagado = pagos
-      .filter((p) => p.paciente_id === s.paciente_id && p.anio === anio && p.mes === s.mes)
-      .reduce((sum, p) => sum + Number(p.monto_pagado ?? 0), 0);
-    const sM = Number(s.sesiones_matutinas ?? 0);
-    const sR = Number(s.sesiones_regulares ?? 0);
-    const totalSesiones = sM + sR;
-    if (totalSesiones === 0 && pagado === 0) continue; // Skip filas vacías sin pago
-
-    // Precio efectivo: si mezcla mat+reg, promedio ponderado.
-    // pac.precio_sesion_regular puede ser NULL (= usar global) o 0 (= no cobra) o número.
-    const pReg = pac.precio_sesion_regular ?? precioGlobalReg;
-    const pMat = pac.precio_sesion_matutina ?? precioGlobalMat;
-    let precio = 0;
-    if (totalSesiones > 0) {
-      precio = (sM * pMat + sR * pReg) / totalSesiones;
-    }
-    filas.push({ pac, mes: s.mes, s, pagado, precio, sesiones: totalSesiones });
-  }
-  filas.sort((a, b) => a.pac.nombre.localeCompare(b.pac.nombre) || a.mes - b.mes);
-
-  // Construir filas — nombre se repite en cada fila (para SUMIFS desde otras
-  // pestañas), pero visualmente se agrupa con borde superior al cambiar de
-  // paciente y color tenue en filas continuadas.
-  let prevPac = "";
-  filas.forEach((f, i) => {
-    const r = i + 2;
-    const esCambioGrupo = f.pac.nombre !== prevPac && prevPac !== "";
-    const esPrimerFilaPac = f.pac.nombre !== prevPac;
-    prevPac = f.pac.nombre;
-
-    const subFx = `C${r}*D${r}`;
-    const ivaFx = `IF(F${r}="Efectivo",0,E${r}*IVA)`;
-    const totalFx = `E${r}+G${r}`;
-    const saldoFx = `H${r}-I${r}`;
-
-    const row = ws.addRow([
-      f.pac.nombre,
-      f.mes,
-      f.sesiones,
-      f.precio,
-      { formula: subFx },
-      f.s.forma_pago_mes,
-      { formula: ivaFx },
-      { formula: totalFx },
-      f.pagado,
-      { formula: saldoFx },
-    ]);
-    [4, 5, 7, 8, 9, 10].forEach((c) => moneyFmt(row.getCell(c)));
-    // Fondo gris claro en columnas calculadas
-    [5, 7, 8, 10].forEach((c) => {
-      row.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_CALC_BG } };
-    });
-
-    // Borde superior al cambiar de paciente + nombre en bold solo la primera vez
-    if (esCambioGrupo) {
-      for (let c = 1; c <= 10; c++) {
-        row.getCell(c).border = { top: { style: "medium", color: { argb: COLOR_BORDE } } };
-      }
-    }
-    if (esPrimerFilaPac) {
-      row.getCell(1).font = { bold: true };
-    } else {
-      // Filas "continuación" del mismo paciente: nombre en gris más tenue
-      row.getCell(1).font = { color: { argb: "FF9CA3AF" } };
-    }
-  });
-
-  // Dropdown forma de pago
-  if (filas.length > 0) {
-    addListValidation(ws, "F", 2, filas.length + 1, FORMAS_PAGO);
-  }
-
-  // Total
-  if (filas.length > 0) {
-    const last = filas.length + 1;
-    totalRow(ws, [
-      "TOTAL", "", "", "",
-      { formula: `SUM(E2:E${last})` },
-      "",
-      { formula: `SUM(G2:G${last})` },
-      { formula: `SUM(H2:H${last})` },
-      { formula: `SUM(I2:I${last})` },
-      { formula: `SUM(J2:J${last})` },
-    ], [5, 7, 8, 9, 10]);
-  }
-
-  setWidths(ws, [32, 6, 10, 11, 12, 14, 10, 13, 11, 11]);
-  ws.views = [{ state: "frozen", ySplit: 1, xSplit: 1 }];
-  ws.autoFilter = `A1:J1`;
 }
 
 // ============================================================================
@@ -659,7 +570,7 @@ function pestFlujoEfectivo(wb: ExcelJS.Workbook, anio: number) {
 
   type Fila = { label: string; formula?: (m: number) => string; subtotal?: "ingresos" | "egresos"; neto?: boolean; saldo?: boolean };
   const filas: Fila[] = [
-    { label: "(+) Terapias Cobradas",       formula: (m) => `SUMIFS(Terapias!$I:$I,Terapias!$B:$B,${m})` },
+    { label: "(+) Terapias Cobradas",       formula: (m) => `SUM(Terapias!$${matrixMesSubColLetter(m, MATRIX_SUB.PAGADO)}:$${matrixMesSubColLetter(m, MATRIX_SUB.PAGADO)})` },
     { label: "(+) Citas Cobradas",          formula: (m) => `SUMIFS(Citas!$H:$H,Citas!$A:$A,">="&DATE(${anio},${m},1),Citas!$A:$A,"<"&DATE(${anio},${m + 1},1))` },
     { label: "(+) Evaluaciones Cobradas",   formula: (m) => `SUMIFS(Evaluaciones!$H:$H,Evaluaciones!$A:$A,">="&DATE(${anio},${m},1),Evaluaciones!$A:$A,"<"&DATE(${anio},${m + 1},1))` },
     { label: "(+) Subarrendamiento Cobrado", formula: (m) => `SUMIFS(Subarrendamiento!$D:$D,Subarrendamiento!$B:$B,${m})` },
@@ -763,9 +674,9 @@ function pestCobranzaMensual(
     const nombreEscaped = p.nombre.replace(/"/g, '""');
     const values: (string | number | { formula: string })[] = [p.nombre];
     for (let m = 1; m <= 12; m++) {
-      // Suma desde Terapias (col L "Pagado") + Citas (col H) + Evaluaciones (col H)
-      // donde el paciente y el mes coincidan
-      const fxTerapias = `SUMIFS(Terapias!$I:$I,Terapias!$A:$A,"${nombreEscaped}",Terapias!$B:$B,${m})`;
+      // Terapias en layout matriz: paciente en col C, Pagado del mes m en columna calculada
+      const colPag = matrixMesSubColLetter(m, MATRIX_SUB.PAGADO);
+      const fxTerapias = `SUMIFS(Terapias!$${colPag}:$${colPag},Terapias!$C:$C,"${nombreEscaped}")`;
       const fxCitas = `SUMIFS(Citas!$H:$H,Citas!$C:$C,"${nombreEscaped}",Citas!$A:$A,">="&DATE(${anio},${m},1),Citas!$A:$A,"<"&DATE(${anio},${m + 1},1))`;
       const fxEval = `SUMIFS(Evaluaciones!$H:$H,Evaluaciones!$C:$C,"${nombreEscaped}",Evaluaciones!$A:$A,">="&DATE(${anio},${m},1),Evaluaciones!$A:$A,"<"&DATE(${anio},${m + 1},1))`;
       values.push({ formula: `(${fxTerapias})+(${fxCitas})+(${fxEval})` });
@@ -796,9 +707,9 @@ function pestCobranzaMensual(
 }
 
 // ============================================================================
-// PESTAÑA: Cobranza Detallada (Paciente × Mes × 8 sub-cols)
+// PESTAÑA: Terapias (Paciente × Mes × 8 sub-cols)
 //
-// REPLICA EXACTA del archivo "Consentido Analisis Datos 2026.xlsx":
+// REPLICA EXACTA del archivo "Consentido Analisis Datos 2026.xlsx", hoja Terapias:
 //   - Col A vacía (decorativa)
 //   - Col B número secuencial
 //   - Col C nombre paciente (amarillo pastel)
@@ -813,17 +724,20 @@ function pestCobranzaMensual(
 //   - Celdas calculadas: SIN fill, SIN border (transparentes)
 //   - Borders thin solo en celdas amarillas
 //   - Format contable mexicano sin signo $
+//
+// Devuelve { lastDataRow } para que las otras hojas armen SUMIFS con rangos
+// exactos (sin riesgo de doble-conteo de filas TOTAL).
 // ============================================================================
 
-function pestCobranzaDetallada(
+function pestTerapias(
   wb: ExcelJS.Workbook,
   anio: number,
   pacientes: Paciente[],
   sesiones: SesionMensual[],
   pagos: PagoTerapia[],
   paramsMap: ParamMap,
-) {
-  const ws = wb.addWorksheet("Cobranza Detallada", { properties: { tabColor: { argb: "FFFFC000" } } });
+): { lastDataRow: number } {
+  const ws = wb.addWorksheet("Terapias", { properties: { tabColor: { argb: "FFFFC000" } } });
 
   // ----- Paleta exacta del archivo de referencia -----
   // Amarillo pastel (datos editables, nombre paciente, parámetros)
@@ -863,28 +777,11 @@ function pestCobranzaDetallada(
   tit.alignment = { vertical: "middle" };
   ws.getRow(1).height = 22;
 
-  // ----- Filas 3-4: parámetros editables por mes (Aumento %, Precio/Hr) -----
-  // En el archivo de referencia hay un Crecimiento/Aumento y un Precio/Hr arriba
-  // de cada mes para escenarios "qué pasa si...". Lo replicamos con un solo
-  // global (apunta a Parámetros) para mantener simpleza.
-  const lblAumento = ws.getCell(3, 4);
-  lblAumento.value = "Aumento:";
-  lblAumento.font = { size: 11, color: { theme: 1 }, name: "Calibri" };
-  const valAumento = ws.getCell(3, 5);
-  valAumento.value = 0;
-  valAumento.numFmt = "0%";
-  valAumento.font = { bold: true, size: 11, color: { theme: 1 }, name: "Calibri" };
-  valAumento.alignment = { horizontal: "center" };
-  valAumento.fill = FILL_AMA;
-  valAumento.border = BORDER_ALL;
-
-  const lblPrecio = ws.getCell(4, 4);
-  lblPrecio.value = "Precio/Hr:";
-  lblPrecio.font = { size: 11, color: { theme: 1 }, name: "Calibri" };
-  const valPrecio = ws.getCell(4, 5);
-  valPrecio.value = { formula: "PRECIO_REG" };
-  valPrecio.numFmt = FMT_REF;
-  valPrecio.font = { size: 11, color: { theme: 1 }, name: "Calibri" };
+  // Fila 2 (subtítulo discreto): muestra el precio global para referencia
+  const lblPrecio = ws.getCell(2, 3);
+  lblPrecio.value = { formula: `"Precio global por hora: $"&TEXT(PRECIO_REG,"#,##0.00")&" (editable en Parámetros)"` };
+  lblPrecio.font = { italic: true, size: 10, color: { argb: "FF7F7F7F" }, name: "Calibri" };
+  lblPrecio.alignment = { vertical: "middle" };
 
   // ----- Fila 5: header de mes (merged 8 cols, fondo verde pastel) -----
   for (let m = 0; m < 12; m++) {
@@ -1083,45 +980,7 @@ function pestCobranzaDetallada(
     cTotAno.border = BORDER_ALL;
   });
 
-  // ----- Fila TOTAL DEL MES -----
-  if (pacActivos.length > 0) {
-    const lastDataRow = 7 + pacActivos.length - 1;
-    const totRowNum = lastDataRow + 2; // dejo una fila de espacio
-
-    const cLabel = ws.getCell(totRowNum, 3);
-    cLabel.value = "TOTAL DEL MES";
-    cLabel.font = { bold: true, size: 11, color: { theme: 1 }, name: "Calibri" };
-    cLabel.fill = FILL_VRD;
-    cLabel.alignment = { horizontal: "right", vertical: "middle" };
-    cLabel.border = BORDER_ALL;
-
-    for (let m = 0; m < 12; m++) {
-      const c0 = mesStartCol(m);
-      // Sumamos Horas (idx 3), Ingreso (idx 5), Pagado (idx 6), Saldo (idx 7)
-      const sums: Array<[number, string]> = [
-        [3, "0"], [5, FMT_REF], [6, FMT_REF], [7, FMT_REF],
-      ];
-      sums.forEach(([idx, fmt]) => {
-        const colL = ws.getColumn(c0 + idx).letter;
-        const c = ws.getCell(totRowNum, c0 + idx);
-        c.value = { formula: `SUM(${colL}7:${colL}${lastDataRow})` };
-        c.numFmt = fmt;
-        c.font = { bold: true, size: 11, color: { theme: 1 }, name: "Arial" };
-        c.fill = FILL_VRD;
-        c.alignment = { horizontal: idx === 3 ? "center" : "right", vertical: "middle" };
-        c.border = BORDER_ALL;
-      });
-    }
-    // Total Año
-    const colTot = ws.getColumn(cTot0).letter;
-    const cAno = ws.getCell(totRowNum, cTot0);
-    cAno.value = { formula: `SUM(${colTot}7:${colTot}${lastDataRow})` };
-    cAno.numFmt = FMT_REF;
-    cAno.font = { bold: true, size: 11, color: { theme: 1 }, name: "Arial" };
-    cAno.fill = FILL_VRD;
-    cAno.alignment = { horizontal: "right", vertical: "middle" };
-    cAno.border = BORDER_ALL;
-  }
+  const lastDataRow = pacActivos.length > 0 ? 7 + pacActivos.length - 1 : 6;
 
   // ----- Anchos de columna (replicando archivo de referencia) -----
   ws.getColumn(1).width = 5.33;
@@ -1145,6 +1004,8 @@ function pestCobranzaDetallada(
 
   // Freeze: 6 filas arriba (título + parámetros + headers), 3 columnas a la izquierda
   ws.views = [{ state: "frozen", ySplit: 6, xSplit: 3 }];
+
+  return { lastDataRow };
 }
 
 // ============================================================================
@@ -1216,10 +1077,10 @@ function pestParaContador(
     const esc = cliente.replace(/"/g, '""');
     const values: (string | { formula: string })[] = [cliente];
     for (let m = 1; m <= 12; m++) {
-      // Terapias: monto_pagado en pesos ya con IVA si transferencia (cliente captura "lo que recibí")
-      // Citas y Evaluaciones: monto_pagado sin IVA. Para mostrar TOTAL CON IVA en facturable, multiplicar por (1+IVA).
-      // Subarrendamiento: monto_cobrado ya con IVA.
-      const fxTerapias = `SUMIFS(Terapias!$I:$I,Terapias!$A:$A,"${esc}",Terapias!$B:$B,${m},Terapias!$F:$F,"<>Efectivo")`;
+      // Terapias en layout matriz: paciente en col C, Pagado en col del mes m sub 6, Forma en col del mes m sub 0 (E=Efectivo, T=otro)
+      const colPag = matrixMesSubColLetter(m, MATRIX_SUB.PAGADO);
+      const colFma = matrixMesSubColLetter(m, MATRIX_SUB.EFVO);
+      const fxTerapias = `SUMIFS(Terapias!$${colPag}:$${colPag},Terapias!$C:$C,"${esc}",Terapias!$${colFma}:$${colFma},"T")`;
       const fxCitas = `SUMIFS(Citas!$H:$H,Citas!$C:$C,"${esc}",Citas!$A:$A,">="&DATE(${anio},${m},1),Citas!$A:$A,"<"&DATE(${anio},${m + 1},1),Citas!$D:$D,"<>Efectivo")*(1+IVA)`;
       const fxEval = `SUMIFS(Evaluaciones!$H:$H,Evaluaciones!$C:$C,"${esc}",Evaluaciones!$A:$A,">="&DATE(${anio},${m},1),Evaluaciones!$A:$A,"<"&DATE(${anio},${m + 1},1),Evaluaciones!$D:$D,"<>Efectivo")*(1+IVA)`;
       const fxSubarr = `SUMIFS(Subarrendamiento!$D:$D,Subarrendamiento!$A:$A,"${esc}",Subarrendamiento!$B:$B,${m},Subarrendamiento!$C:$C,"<>Efectivo")`;
@@ -1465,12 +1326,15 @@ export async function generarExcelRespaldo(anio: number): Promise<Blob> {
   pestParametros(wb, paramsMap);
   pestTablas(wb);
 
+  // Terapias debe construirse antes que las hojas que la referencian
+  // (Cobranza Mensual, Para el Contador, Flujo de Efectivo) porque sus SUMIFS
+  // apuntan a las columnas del layout matriz.
+  pestTerapias(wb, anio, pacientes, sesiones, pagos, paramsMap);
+
   // Editables
   pestPacientes(wb, pacientes);
   pestCobranzaMensual(wb, anio, pacientes);
-  pestCobranzaDetallada(wb, anio, pacientes, sesiones, pagos, paramsMap);
   pestEmpleados(wb, empleados);
-  pestTerapias(wb, anio, pacientes, sesiones, pagos, paramsMap);
   pestEventos(wb, anio, eventos, "citas");
   pestEventos(wb, anio, eventos, "evaluaciones");
   pestSubarrendamiento(wb, anio, subarr);
@@ -1489,9 +1353,10 @@ export async function generarExcelRespaldo(anio: number): Promise<Blob> {
   const ws = wb.worksheets;
   const reordered = [
     "Pacientes",
-    "Cobranza Mensual", "Cobranza Detallada",
+    "Terapias",
+    "Cobranza Mensual",
     "Empleados",
-    "Terapias", "Citas", "Evaluaciones",
+    "Citas", "Evaluaciones",
     "Subarrendamiento",
     "Gastos", "Gastos por Categoría",
     "Nómina",
