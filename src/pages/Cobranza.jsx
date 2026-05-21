@@ -88,6 +88,7 @@ export default function Cobranza() {
       });
 
       // Para cada grupo, calcular si hubo saldo a favor (pagó de más)
+      // monto_pagado en BD = total efectivamente recibido (con IVA si non-Efectivo)
       const ivaRateLocal = Number(params.iva || 0.16);
       const precioRegularLocal = Number(params.precio_terapia_regular || 1100);
       Object.values(porPacMes).forEach(({ paciente_id, anio, mes, pagos }) => {
@@ -123,8 +124,7 @@ export default function Cobranza() {
         }
 
         if (totalEsperado !== null) {
-          const pagadoReal = conIva ? Math.round(montoPagadoTotal * (1 + ivaRateLocal)) : montoPagadoTotal;
-          const diferencia = pagadoReal - totalEsperado; // positivo = saldo a favor
+          const diferencia = montoPagadoTotal - totalEsperado; // positivo = saldo a favor
           if (diferencia > 0) {
             saldos[paciente_id] = (saldos[paciente_id] || 0) + diferencia;
           }
@@ -240,24 +240,22 @@ export default function Cobranza() {
       ? (conIva ? Math.round(montoConRecargo * (1 + ivaRate)) : montoConRecargo)
       : null;
 
-    const pagadoConIva = conIva ? Math.round(montoPagado * (1 + ivaRate)) : null;
+    // monto_pagado es el TOTAL recibido (ya con IVA si conIva) — el sistema lo
+    // espera así en todos los consumers (Terapias, Para el Contador, etc.)
     const saldoAFavor = saldosAFavor[paciente_id] || 0;
 
     let saldo = null;
     if (totalEsperado !== null) {
-      const pagadoReal = conIva ? (pagadoConIva || 0) : montoPagado;
-      const diff = totalEsperado - pagadoReal - saldoAFavor;
-      // Si la diferencia es pequeña (≤ $50) por redondeos, considerar saldo 0
+      const diff = totalEsperado - montoPagado - saldoAFavor;
       saldo = Math.abs(diff) <= 50 ? 0 : diff;
     } else if (montoPagado > 0) {
-      // Sin calendario pero con pago registrado = al corriente
       saldo = 0;
     }
 
     const saldoParaEstatus = saldo !== null ? saldo : (montoPagado > 0 ? 0 : 999);
     const estatus = estatusCxC(saldoParaEstatus, diaRef);
 
-    return { paciente_id, nombre, tieneCal, totalSesiones, montoEfectivo: montoConRecargo, totalEsperado, montoPagado, pagadoConIva, saldo, saldoAFavor, estatus };
+    return { paciente_id, nombre, tieneCal, totalSesiones, montoEfectivo: montoConRecargo, totalEsperado, montoPagado, saldo, saldoAFavor, estatus };
   };
 
   // Filas con calendario
@@ -469,8 +467,7 @@ export default function Cobranza() {
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Total Esperado</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-stone-500">Recargo 10%</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Forma de Pago</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Pagado (sin IVA)</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Con IVA</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Pagado</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">A favor (mes ant.)</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Saldo</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-stone-500">Estatus</th>
@@ -479,7 +476,7 @@ export default function Cobranza() {
             <tbody>
               {cxcRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center">
+                  <td colSpan={10} className="px-4 py-10 text-center">
                     <p className="text-stone-400 text-sm">No hay datos de cobranza para este mes</p>
                     <p className="text-stone-300 text-xs mt-1">Registra pagos o guarda calendarios desde la sección Calendarios</p>
                   </td>
@@ -537,11 +534,8 @@ export default function Cobranza() {
                         onFocus={e => e.target.select()}
                         onChange={e => setEdit(row.paciente_id, "monto", Number(e.target.value))}
                         className="w-24 border border-stone-200 rounded-lg px-2 py-1.5 text-right text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
+                        title="Monto neto recibido (lo que efectivamente entró a la cuenta)"
                       />
-                    </td>
-
-                    <td className="px-4 py-3 text-right text-stone-700 font-medium">
-                      {row.pagadoConIva !== null ? fmtMXN(row.pagadoConIva) : <span className="text-stone-300">—</span>}
                     </td>
 
                     <td className="px-4 py-3 text-right">
