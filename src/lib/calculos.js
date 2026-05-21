@@ -87,6 +87,14 @@ export function calcularTotalTerapia(sesion, pago, params, paciente) {
   return { subtotal, becaAplicada, neto, recargo, iva, totalEsperado, saldo, sesiones: matutinas + regulares };
 }
 
+// Cutoff de convención: desde mayo 2026, monto_pagado de eventos = total con IVA
+// recibido (igual que terapias / cobranza). Antes se capturaba como subtotal sin IVA.
+export const CUTOFF_EVENTO_TOTAL_CON_IVA = "2026-05-01";
+
+export function eventoUsaTotalConIva(evento) {
+  return (evento?.fecha || "") >= CUTOFF_EVENTO_TOTAL_CON_IVA;
+}
+
 export function calcularTotalEvento(evento, params) {
   const ivaRate = Number(params.iva || 0.16);
   const precios = {
@@ -103,11 +111,16 @@ export function calcularTotalEvento(evento, params) {
   const iva = conIva ? Math.round(precioBase * ivaRate) : 0;
   const totalEsperado = precioBase + iva;
   const montoPagado = Number(evento.monto_pagado || 0);
-  // En transferencia, el monto_pagado que captura el usuario es sin IVA (igual que terapias)
-  // así que el total pagado con IVA = montoPagado * (1 + ivaRate)
-  const montoPagadoConIva = conIva ? Math.round(montoPagado * (1 + ivaRate)) : montoPagado;
-  const saldo = totalEsperado - montoPagadoConIva;
-  return { precioBase, iva, totalEsperado, montoPagado, montoPagadoConIva, saldo };
+  const totalConIva = eventoUsaTotalConIva(evento);
+  // Convención nueva (mayo 2026+): monto_pagado ya es total con IVA recibido.
+  // Convención previa: monto_pagado es subtotal sin IVA, hay que inflar × (1+iva).
+  const montoPagadoConIva = (totalConIva || !conIva)
+    ? montoPagado
+    : Math.round(montoPagado * (1 + ivaRate));
+  const saldoBruto = totalEsperado - montoPagadoConIva;
+  // Tolerancia $50 por redondeos (igual criterio que Cobranza)
+  const saldo = totalConIva && Math.abs(saldoBruto) <= 50 ? 0 : saldoBruto;
+  return { precioBase, iva, totalEsperado, montoPagado, montoPagadoConIva, saldo, totalConIva };
 }
 
 export function estatusCxC(saldo, diaHoy) {
