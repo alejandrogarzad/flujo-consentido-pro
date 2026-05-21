@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { calcularTotalEvento, eventoUsaTotalConIva, paramsToObject, fmtMXN } from "@/lib/calculos";
+import { calcularTotalEvento, paramsToObject, fmtMXN } from "@/lib/calculos";
 import { Plus, X, Edit2, Trash2, DollarSign } from "lucide-react";
 
 const TIPOS_CITAS = ["Cita inicial / ingreso","Cita seguimiento directora","Cita escolar virtual","Cita escolar presencial","Observación escolar","Reporte adicional"];
@@ -21,7 +21,6 @@ const empty = { fecha: new Date().toISOString().split("T")[0], tipo: TIPOS[0], n
 function EventoModal({ editing, form, setForm, onTipoChange, onSave, onClose, pacientes, tiposPermitidos }) {
   const usaDropdown = TIPOS_CON_PACIENTE.includes(form.tipo);
   const soloMes = TIPOS_SOLO_MES.includes(form.tipo);
-  const totalConIva = eventoUsaTotalConIva(form);
 
   // Para tipos solo-mes: extrae mes y año de la fecha guardada
   const fechaObj = form.fecha ? new Date(form.fecha + "T12:00:00") : new Date();
@@ -128,12 +127,12 @@ function EventoModal({ editing, form, setForm, onTipoChange, onSave, onClose, pa
             </div>
             <div>
               <label className="text-xs font-medium text-stone-500 block mb-1">
-                Monto Pagado {totalConIva ? <span className="text-stone-400 font-normal">(total recibido)</span> : <span className="text-stone-400 font-normal">(sin IVA)</span>}
+                Monto Pagado <span className="text-stone-400 font-normal">(total recibido)</span>
               </label>
               <input type="number" min="0" value={form.monto_pagado ?? 0}
                 onFocus={e => e.target.select()}
                 onChange={e => setForm({...form, monto_pagado: e.target.value === "" ? 0 : Number(e.target.value)})}
-                title={totalConIva ? "Monto neto recibido (lo que efectivamente entró a la cuenta, ya con IVA si aplica)" : "Subtotal sin IVA (convención previa a mayo 2026)"}
+                title="Monto exacto recibido (lo que entró a la cuenta tal cual, ya con IVA si la forma de pago lo incluye)"
                 className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200" />
             </div>
           </div>
@@ -167,14 +166,13 @@ function TablaEventos({ eventos, params, onEdit, onDel, onPago }) {
               <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">IVA</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Total</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Pagado</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500" title="Solo aplica a eventos previos a mayo 2026 (convención sin IVA)">Con IVA <span className="text-stone-300 font-normal">(hist.)</span></th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Saldo</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {eventos.length === 0 ? (
-              <tr><td colSpan={11} className="px-4 py-8 text-center text-stone-400 text-sm">Sin registros</td></tr>
+              <tr><td colSpan={10} className="px-4 py-8 text-center text-stone-400 text-sm">Sin registros</td></tr>
             ) : eventos.map(ev => {
               const c = calcularTotalEvento(ev, params);
               return (
@@ -189,7 +187,6 @@ function TablaEventos({ eventos, params, onEdit, onDel, onPago }) {
                   <td className="px-4 py-3 text-right text-stone-500">{c.iva > 0 ? fmtMXN(c.iva) : "—"}</td>
                   <td className="px-4 py-3 text-right font-medium text-stone-800">{fmtMXN(c.totalEsperado)}</td>
                   <td className="px-4 py-3 text-right text-green-600">{fmtMXN(c.montoPagado)}</td>
-                  <td className="px-4 py-3 text-right text-stone-700">{c.montoPagadoConIva !== c.montoPagado ? fmtMXN(c.montoPagadoConIva) : "—"}</td>
                   <td className={`px-4 py-3 text-right font-medium ${c.saldo > 0 ? "text-red-600" : "text-green-600"}`}>{fmtMXN(c.saldo)}</td>
                   <td className="px-4 py-3 text-right">
                     {c.saldo > 0 && (
@@ -210,16 +207,12 @@ function TablaEventos({ eventos, params, onEdit, onDel, onPago }) {
 
 function PagoModal({ evento, params, onClose, onSave }) {
   const c = calcularTotalEvento(evento, params);
-  const ivaRate = Number(params.iva || 0.16);
-  const conIva = evento.forma_pago !== "Efectivo";
-  // En nueva convención (mayo+) el monto a capturar = saldo tal cual (es total).
-  // En la anterior, hay que expresarlo "sin IVA" porque así se guarda.
-  const sugerido = (c.totalConIva || !conIva) ? c.saldo : Math.round(c.saldo / (1 + ivaRate));
+  const sugerido = c.saldo > 0 ? c.saldo : 0;
 
   const hoy = new Date();
   const [mes, setMes] = useState(hoy.getMonth() + 1);
   const [anio, setAnio] = useState(hoy.getFullYear());
-  const [monto, setMonto] = useState(sugerido > 0 ? sugerido : 0);
+  const [monto, setMonto] = useState(sugerido);
 
   const handleSave = () => {
     const nuevaFechaPago = `${anio}-${String(mes).padStart(2,"0")}-01`;
@@ -239,7 +232,6 @@ function PagoModal({ evento, params, onClose, onSave }) {
             <p className="font-medium text-stone-700">{evento.nombre_paciente} — {evento.tipo}</p>
             <p className="text-stone-500 text-xs mt-0.5">
               Saldo pendiente: <span className="font-bold text-red-600">{fmtMXN(c.saldo)}</span>
-              {conIva && !c.totalConIva && <span className="ml-1 text-stone-400">(captura sin IVA: {fmtMXN(sugerido)})</span>}
             </p>
           </div>
           <div>
@@ -255,7 +247,7 @@ function PagoModal({ evento, params, onClose, onSave }) {
           </div>
           <div>
             <label className="text-xs font-medium text-stone-500 block mb-1">
-              Monto a abonar {conIva && !c.totalConIva ? "(sin IVA)" : c.totalConIva ? "(total recibido)" : ""}
+              Monto a abonar <span className="text-stone-400 font-normal">(total recibido)</span>
             </label>
             <input type="number" min="0" value={monto} onFocus={e => e.target.select()}
               onChange={e => setMonto(e.target.value)}
