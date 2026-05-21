@@ -378,10 +378,11 @@ function EventoModal({
                 className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200" />
             </div>
             <div>
-              <label className="text-xs font-medium text-stone-500 block mb-1">Monto Pagado</label>
+              <label className="text-xs font-medium text-stone-500 block mb-1">Monto Pagado <span className="text-stone-400 font-normal">(total recibido)</span></label>
               <input type="number" min="0" value={form.monto_pagado}
                 onFocus={(e) => (e.target as HTMLInputElement).select()}
                 onChange={(e) => setForm({ ...form, monto_pagado: e.target.value === "" ? 0 : Number(e.target.value) })}
+                title="Monto exacto recibido (lo que entró a la cuenta tal cual, con IVA si aplica)"
                 className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200" />
             </div>
           </div>
@@ -409,14 +410,11 @@ function PagoModal({
   onSave: (id: string, data: Partial<Evento>) => void;
 }) {
   const c = calcularTotalEvento(evento, params);
-  const ivaRate = Number(params.iva ?? 0.16);
-  const conIva = evento.forma_pago !== "Efectivo";
-  const saldoSinIva = conIva ? Math.round(c.saldo / (1 + ivaRate)) : c.saldo;
 
   const hoy = new Date();
   const [mes, setMes] = useState(hoy.getMonth() + 1);
   const [anio, setAnio] = useState(hoy.getFullYear());
-  const [monto, setMonto] = useState<number | string>(saldoSinIva > 0 ? saldoSinIva : 0);
+  const [monto, setMonto] = useState<number | string>(c.saldo > 0 ? c.saldo : 0);
 
   const handleSave = () => {
     const nuevaFechaPago = `${anio}-${String(mes).padStart(2, "0")}-01`;
@@ -436,7 +434,6 @@ function PagoModal({
             <p className="font-medium text-stone-700">{evento.nombre_paciente} — {evento.tipo}</p>
             <p className="text-stone-500 text-xs mt-0.5">
               Saldo pendiente: <span className="font-bold text-red-600">{fmtMXN(c.saldo)}</span>
-              {conIva && <span className="ml-1 text-stone-400">(captura sin IVA: {fmtMXN(saldoSinIva)})</span>}
             </p>
           </div>
           <div>
@@ -451,9 +448,10 @@ function PagoModal({
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-stone-500 block mb-1">Monto a abonar {conIva ? "(sin IVA)" : ""}</label>
+            <label className="text-xs font-medium text-stone-500 block mb-1">Monto a abonar <span className="text-stone-400 font-normal">(total recibido)</span></label>
             <input type="number" min="0" value={monto} onFocus={(e) => (e.target as HTMLInputElement).select()}
               onChange={(e) => setMonto(e.target.value)}
+              title="Monto exacto recibido (lo que entró a la cuenta tal cual, con IVA si aplica)"
               className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200" />
           </div>
         </div>

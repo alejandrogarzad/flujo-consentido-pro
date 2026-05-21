@@ -31,7 +31,6 @@ interface CobranzaRow {
   montoEfectivo: number | null;
   totalEsperado: number | null;
   montoPagado: number;
-  pagadoConIva: number | null;
   saldo: number | null;
   saldoAFavor: number;
   estatus: EstatusCxC;
@@ -205,9 +204,9 @@ export default function CobranzaPage() {
           }
 
           // totalEsperado puede ser 0 legítimo (override=0, beca completa).
+          // monto_pagado en BD = total efectivamente recibido (con IVA si non-Efectivo)
           if (totalEsperado !== null && totalEsperado >= 0) {
-            const pagadoReal = conIva ? Math.round(montoPagadoTotal * (1 + ivaRateLocal)) : montoPagadoTotal;
-            const dif = pagadoReal - totalEsperado;
+            const dif = montoPagadoTotal - totalEsperado;
             // Tolerancia $50 (ruido de IVA/redondeo). Acumula AMBAS direcciones:
             //   dif > 50  → saldo a favor (positivo)
             //   dif < -50 → saldo en contra (negativo, se arrastra como deuda)
@@ -314,13 +313,12 @@ export default function CobranzaPage() {
       ? (conIva ? Math.round(montoConRecargo * (1 + ivaRate)) : montoConRecargo)
       : null;
 
-    const pagadoConIva = conIva ? Math.round(montoPagado * (1 + ivaRate)) : null;
+    // monto_pagado es el TOTAL recibido (ya con IVA si conIva). Sin inflar.
     const saldoAFavor = saldosAFavor[paciente_id] || 0;
 
     let saldo: number | null = null;
     if (totalEsperado !== null) {
-      const pagadoReal = conIva ? (pagadoConIva ?? 0) : montoPagado;
-      const diff = totalEsperado - pagadoReal - saldoAFavor;
+      const diff = totalEsperado - montoPagado - saldoAFavor;
       saldo = Math.abs(diff) <= 50 ? 0 : diff;
     } else if (montoPagado > 0) {
       saldo = 0;
@@ -332,7 +330,7 @@ export default function CobranzaPage() {
     return {
       paciente_id, nombre, tieneCal,
       totalSesiones, montoEfectivo: montoConRecargo, totalEsperado,
-      montoPagado, pagadoConIva, saldo, saldoAFavor, estatus,
+      montoPagado, saldo, saldoAFavor, estatus,
     };
   };
 
@@ -497,8 +495,7 @@ export default function CobranzaPage() {
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Total Esperado</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-stone-500">Recargo 10%</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Forma de Pago</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Pagado (sin IVA)</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Con IVA</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Pagado</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Saldo previo</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Saldo</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-stone-500">Estatus</th>
@@ -508,7 +505,7 @@ export default function CobranzaPage() {
             <tbody>
               {cxcRows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center">
+                  <td colSpan={10} className="px-4 py-10 text-center">
                     <p className="text-stone-400 text-sm">No hay datos de cobranza para este mes</p>
                     <p className="text-stone-300 text-xs mt-1">Registra pagos o guarda calendarios desde la sección Calendarios</p>
                   </td>
@@ -551,10 +548,8 @@ export default function CobranzaPage() {
                         <input type="number" min="0" value={edit.monto}
                           onFocus={(e) => e.target.select()}
                           onChange={(e) => setEdit(row.paciente_id, "monto", Number(e.target.value))}
+                          title="Monto neto recibido (lo que efectivamente entró a la cuenta, con IVA si aplica)"
                           className="w-24 border border-stone-200 rounded-lg px-2 py-1.5 text-right text-sm focus:outline-none focus:ring-2 focus:ring-violet-200" />
-                      </td>
-                      <td className="px-4 py-3 text-right text-stone-700 font-medium">
-                        {row.pagadoConIva !== null ? fmtMXN(row.pagadoConIva) : <span className="text-stone-300">—</span>}
                       </td>
                       <td className="px-4 py-3 text-right">
                         {row.saldoAFavor === 0 ? (

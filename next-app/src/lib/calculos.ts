@@ -184,7 +184,6 @@ export interface ResultadoEvento {
   iva: number;
   totalEsperado: number;
   montoPagado: number;
-  montoPagadoConIva: number;
   saldo: number;
 }
 
@@ -204,11 +203,11 @@ export function calcularTotalEvento(evento: EventoCobranza, params: ParamMap): R
   const iva = conIva ? Math.round(precioBase * ivaRate) : 0;
   const totalEsperado = precioBase + iva;
   const montoPagado = Number(evento.monto_pagado ?? 0);
-  // En transferencia, el monto_pagado capturado es sin IVA (igual que terapias);
-  // el total con IVA = montoPagado * (1 + ivaRate).
-  const montoPagadoConIva = conIva ? Math.round(montoPagado * (1 + ivaRate)) : montoPagado;
-  const saldo = totalEsperado - montoPagadoConIva;
-  return { precioBase, iva, totalEsperado, montoPagado, montoPagadoConIva, saldo };
+  // monto_pagado = total recibido tal cual (con IVA si la forma de pago lo incluye).
+  // El IVA se deriva para el contador en Para el Contador / Impuestos.
+  const saldoBruto = totalEsperado - montoPagado;
+  const saldo = Math.abs(saldoBruto) <= 50 ? 0 : saldoBruto;
+  return { precioBase, iva, totalEsperado, montoPagado, saldo };
 }
 
 // ---------- Estatus visual de CxC --------------------------------------------
