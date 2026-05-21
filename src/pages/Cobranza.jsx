@@ -416,7 +416,7 @@ export default function Cobranza() {
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-stone-800">Cobranza</h1>
+            <h1 className="text-2xl font-bold text-stone-800">Cobranza <span className="text-xs font-normal text-green-600 align-middle ml-2">✓ v2 (sin Con IVA)</span></h1>
             <p className="text-xs text-stone-400 mt-0.5 flex items-center gap-1">
               <Calendar size={12} /> Sesiones calculadas desde el calendario guardado del mes
             </p>
