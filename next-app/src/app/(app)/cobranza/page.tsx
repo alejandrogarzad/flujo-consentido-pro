@@ -73,6 +73,62 @@ function calcularSesionesDesdeCal(
   return { totalSesiones, montoEfectivo };
 }
 
+// Cálculo ÚNICO del esperado de un mes — usado tanto por la vista del mes
+// actual (buildRow) como por el arrastre de saldos de meses anteriores, para
+// que NUNCA difieran (antes el arrastre usaba sesiones_matutinas/regulares y
+// generaba deudas fantasma frente a meses que en su propia vista cuadraban).
+function calcularEsperadoMes(
+  cal: CalendarioPaciente | null,
+  sesionesManual: number | null,
+  forma: FormaPago,
+  recargo: boolean,
+  params: ParamMap,
+  paciente: Paciente | null | undefined,
+  mes: number,
+  anio: number,
+): { totalSesiones: number | null; montoConRecargo: number | null; totalEsperado: number | null } {
+  const ivaRate = Number(params.iva ?? 0.16);
+  const recargoPct = Number(params.recargo_pago_tarde ?? 0.1);
+  const conIva = CON_IVA_FORMAS.includes(forma);
+  const precioReg = precioPorSesion(paciente ?? null, params, "Regular");
+
+  let totalSesiones: number | null = null;
+  let montoEfectivo: number | null = null;
+
+  if (cal) {
+    const horarioEfectivo = cal.horario && Object.values(cal.horario).some((v) => v && v.trim())
+      ? cal.horario
+      : (paciente?.dias_sesion ?? {});
+    const res = calcularSesionesDesdeCal({ ...cal, horario: horarioEfectivo as Record<string, string> }, params, paciente);
+    totalSesiones = res.totalSesiones;
+    montoEfectivo = res.montoEfectivo;
+  } else if (paciente?.dias_sesion) {
+    const res = calcularSesionesDesdeCal(
+      { anio, mes, horario: paciente.dias_sesion as Record<string, string>, excepciones: "" },
+      params, paciente,
+    );
+    if (res.totalSesiones > 0) {
+      totalSesiones = res.totalSesiones;
+      montoEfectivo = res.montoEfectivo;
+    }
+  }
+
+  // sesiones_manual (override del pago) toma precedencia, igual que buildRow
+  if (sesionesManual !== null && sesionesManual !== undefined) {
+    totalSesiones = Number(sesionesManual);
+    montoEfectivo = totalSesiones * precioReg;
+  }
+
+  const montoConRecargo = montoEfectivo !== null
+    ? (recargo ? Math.round(montoEfectivo * (1 + recargoPct)) : montoEfectivo)
+    : null;
+  const totalEsperado = montoConRecargo !== null
+    ? (conIva ? Math.round(montoConRecargo * (1 + ivaRate)) : montoConRecargo)
+    : null;
+
+  return { totalSesiones, montoConRecargo, totalEsperado };
+}
+
 export default function CobranzaPage() {
   const [params, setParams] = useState<ParamMap>({});
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
@@ -131,9 +187,6 @@ export default function CobranzaPage() {
       const filtroVal = filtroAnio * 100 + filtroMes;
       const filtroEsAnteriorABase = filtroVal <= baseVal;
 
-      const ivaRateLocal = Number(params.iva ?? 0.16);
-      const precioRegularLocal = Number(params.precio_terapia_regular ?? 1100);
-      const precioMatLocal = Number(params.precio_terapia_matutina ?? 900);
       const pacMapAnt = Object.fromEntries(allPacientes.map((p) => [p.id, p]));
       const saldos: Record<string, number> = {};
 
@@ -170,38 +223,15 @@ export default function CobranzaPage() {
           if (!pacienteAplicaEnMes(pac, mes, anio)) return;
 
           const pagos = pagosPorKey[k] || [];
-          const cal = allCals.find((c) => c.paciente_id === paciente_id && c.anio === anio && c.mes === mes);
+          const cal = allCals.find((c) => c.paciente_id === paciente_id && c.anio === anio && c.mes === mes) || null;
           const montoPagadoTotal = pagos.reduce((s, p) => s + Number(p.monto_pagado || 0), 0);
           const forma = pagos[0]?.forma_pago || pac.forma_pago_default || "Efectivo";
-          const conIva = CON_IVA_FORMAS.includes(forma);
-          const pReg = precioPorSesion(pac, params, "Regular");
-          const pMat = precioPorSesion(pac, params, "Matutina");
+          const sesionesManual = pagos.find((p) => p.sesiones_manual != null)?.sesiones_manual ?? null;
+          const recargo = pagos[0]?.recargo || false;
 
-          let totalEsperado: number | null = null;
-          if (cal) {
-            // Si hay override, úsalo (incluso 0)
-            if (cal.monto_override !== null && cal.monto_override !== undefined) {
-              const monto = Number(cal.monto_override);
-              totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
-            } else {
-              const sM = Number(cal.sesiones_matutinas) || 0;
-              const sR = Number(cal.sesiones_regulares) || 0;
-              const rC = Number(cal.reposiciones_count) || 0;
-              const totalSes = sM + sR + rC;
-              if (totalSes > 0) {
-                let monto = sM * pMat + sR * pReg + rC * pReg;
-                const recargoPago = pagos[0]?.recargo ? monto * 0.1 : 0;
-                monto += recargoPago;
-                totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
-              }
-            }
-          } else if (pagos[0]?.sesiones_manual != null) {
-            const ses = Number(pagos[0].sesiones_manual);
-            if (ses > 0) {
-              const monto = ses * pReg;
-              totalEsperado = conIva ? Math.round(monto * (1 + ivaRateLocal)) : monto;
-            }
-          }
+          // Mismo cálculo que la vista del mes (buildRow) para que un mes
+          // cuadrado no genere deuda fantasma al arrastrarse.
+          const { totalEsperado } = calcularEsperadoMes(cal, sesionesManual, forma, recargo, params, pac, mes, anio);
 
           // totalEsperado puede ser 0 legítimo (override=0, beca completa).
           // monto_pagado en BD = total efectivamente recibido (con IVA si non-Efectivo)
@@ -250,10 +280,6 @@ export default function CobranzaPage() {
     cargarMes();
   }, [cargarMes]);
 
-  const ivaRate = Number(params.iva ?? 0.16);
-  const precioRegular = Number(params.precio_terapia_regular ?? 1100);
-  const recargoPct = Number(params.recargo_pago_tarde ?? 0.1);
-
   const hoy = new Date();
   const esMesActual = filtroAnio === hoy.getFullYear() && filtroMes === hoy.getMonth() + 1;
   const diaRef = esMesActual ? hoy.getDate() : (filtroAnio > hoy.getFullYear() || (filtroAnio === hoy.getFullYear() && filtroMes > hoy.getMonth() + 1) ? 1 : 31);
@@ -268,50 +294,12 @@ export default function CobranzaPage() {
 
   const buildRow = (paciente_id: string, nombre: string, tieneCal: boolean, cal: CalendarioPaciente | null): CobranzaRow => {
     const edit = edits[paciente_id] ?? { monto: 0, forma: "Efectivo" as FormaPago, sesiones: null, recargo: false };
-    const conIva = CON_IVA_FORMAS.includes(edit.forma);
     const montoPagado = Number(edit.monto || 0);
+    const pac = pacienteMap[paciente_id];
 
-    let totalSesiones: number | null = null;
-    let montoEfectivo: number | null = null;
-
-    if (tieneCal && cal) {
-      const pac = pacienteMap[paciente_id];
-      const horarioEfectivo = cal.horario && Object.values(cal.horario).some((v) => v && v.trim())
-        ? cal.horario
-        : (pac?.dias_sesion ?? {});
-      const res = calcularSesionesDesdeCal({ ...cal, horario: horarioEfectivo as Record<string, string> }, params, pac);
-      totalSesiones = res.totalSesiones;
-      montoEfectivo = res.montoEfectivo;
-    } else {
-      const pac = pacienteMap[paciente_id];
-      if (pac?.dias_sesion) {
-        const res = calcularSesionesDesdeCal(
-          { anio: filtroAnio, mes: filtroMes, horario: pac.dias_sesion as Record<string, string>, excepciones: "" },
-          params,
-          pac,
-        );
-        if (res.totalSesiones > 0) {
-          totalSesiones = res.totalSesiones;
-          montoEfectivo = res.montoEfectivo;
-        }
-      }
-    }
-
-    if (edit.sesiones !== null && edit.sesiones !== undefined) {
-      totalSesiones = Number(edit.sesiones);
-      // Precio: helper respeta NULL=global, 0=literal, >0=ese precio
-      const pac = pacienteMap[paciente_id];
-      const precioEfectivo = precioPorSesion(pac, params, "Regular");
-      montoEfectivo = totalSesiones * precioEfectivo;
-    }
-
-    const montoConRecargo = montoEfectivo !== null
-      ? (edit.recargo ? Math.round(montoEfectivo * (1 + recargoPct)) : montoEfectivo)
-      : null;
-
-    const totalEsperado = montoConRecargo !== null
-      ? (conIva ? Math.round(montoConRecargo * (1 + ivaRate)) : montoConRecargo)
-      : null;
+    const { totalSesiones, montoConRecargo, totalEsperado } = calcularEsperadoMes(
+      tieneCal ? cal : null, edit.sesiones, edit.forma, edit.recargo, params, pac, filtroMes, filtroAnio,
+    );
 
     // monto_pagado es el TOTAL recibido (ya con IVA si conIva). Sin inflar.
     const saldoAFavor = saldosAFavor[paciente_id] || 0;
