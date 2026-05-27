@@ -177,20 +177,24 @@ export default function CalendariosPage() {
     if (!p) return;
     const cal = calendarios.find((c) => c.paciente_id === pacienteId && c.anio === anio && c.mes === mes);
     if (cal) {
-      // Respaldo: si el calendario guardado quedó sin horario pero la ficha sí
-      // tiene "Horario Semanal", rellenar desde la ficha en vez de dejar en
-      // blanco (evita capturar el horario a mano cada mes para esos pacientes).
-      const horarioVacio = !cal.horario || Object.values(cal.horario).every((v) => !v);
-      const dsTieneHorario = !!p.dias_sesion && Object.values(p.dias_sesion).some((v) => v && v.trim());
-      if (horarioVacio && dsTieneHorario) {
-        setHorario({ ...emptyHorario(), ...(p.dias_sesion ?? {}) });
-        setTipoSesion({ ...emptyTipoSesion(), ...(p.tipo_sesion ?? {}) });
-        setTerapeutas({ ...emptyHorario(), ...(p.terapeutas ?? {}) });
-      } else {
-        setHorario({ ...emptyHorario(), ...(cal.horario ?? {}) });
-        setTipoSesion({ ...emptyTipoSesion(), ...(cal.tipo_sesion ?? {}) });
-        setTerapeutas({ ...emptyHorario(), ...(cal.terapeutas ?? {}) });
-      }
+      // Merge por día: la ficha (Horario Semanal) es la base; los días que el
+      // calendario guardado SÍ tenga capturados mandan (overrides del mes). Así
+      // un día que quedó vacío en el calendario guardado (ej. viernes de Frida)
+      // se completa desde la ficha en vez de faltar, sin pisar ajustes del mes.
+      const horarioMerged: HorarioSemanal = { ...emptyHorario(), ...(p.dias_sesion ?? {}) };
+      const tipoMerged: TipoSesionSemanal = { ...emptyTipoSesion(), ...(p.tipo_sesion ?? {}) };
+      const terapMerged: HorarioSemanal = { ...emptyHorario(), ...(p.terapeutas ?? {}) };
+      DIAS_KEY.forEach((d) => {
+        const val = cal.horario?.[d];
+        if (val && val.trim()) {
+          horarioMerged[d] = val;
+          if (cal.tipo_sesion?.[d]) tipoMerged[d] = cal.tipo_sesion[d];
+          if (cal.terapeutas?.[d]) terapMerged[d] = cal.terapeutas[d];
+        }
+      });
+      setHorario(horarioMerged);
+      setTipoSesion(tipoMerged);
+      setTerapeutas(terapMerged);
       setExcepciones(cal.excepciones ?? "");
       setReposiciones(cal.reposiciones ?? []);
       setMontoOverride(cal.monto_override ?? null);
