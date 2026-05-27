@@ -177,9 +177,20 @@ export default function CalendariosPage() {
     if (!p) return;
     const cal = calendarios.find((c) => c.paciente_id === pacienteId && c.anio === anio && c.mes === mes);
     if (cal) {
-      setHorario({ ...emptyHorario(), ...(cal.horario ?? {}) });
-      setTipoSesion({ ...emptyTipoSesion(), ...(cal.tipo_sesion ?? {}) });
-      setTerapeutas({ ...emptyHorario(), ...(cal.terapeutas ?? {}) });
+      // Respaldo: si el calendario guardado quedó sin horario pero la ficha sí
+      // tiene "Horario Semanal", rellenar desde la ficha en vez de dejar en
+      // blanco (evita capturar el horario a mano cada mes para esos pacientes).
+      const horarioVacio = !cal.horario || Object.values(cal.horario).every((v) => !v);
+      const dsTieneHorario = !!p.dias_sesion && Object.values(p.dias_sesion).some((v) => v && v.trim());
+      if (horarioVacio && dsTieneHorario) {
+        setHorario({ ...emptyHorario(), ...(p.dias_sesion ?? {}) });
+        setTipoSesion({ ...emptyTipoSesion(), ...(p.tipo_sesion ?? {}) });
+        setTerapeutas({ ...emptyHorario(), ...(p.terapeutas ?? {}) });
+      } else {
+        setHorario({ ...emptyHorario(), ...(cal.horario ?? {}) });
+        setTipoSesion({ ...emptyTipoSesion(), ...(cal.tipo_sesion ?? {}) });
+        setTerapeutas({ ...emptyHorario(), ...(cal.terapeutas ?? {}) });
+      }
       setExcepciones(cal.excepciones ?? "");
       setReposiciones(cal.reposiciones ?? []);
       setMontoOverride(cal.monto_override ?? null);
