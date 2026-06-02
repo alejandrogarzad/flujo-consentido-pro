@@ -34,11 +34,14 @@ export default function ParaContadorPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // listAll() pagina internamente; .list(limit) cae al cap de 1000 de
+    // Supabase aunque pidas más. CRÍTICO porque esta página alimenta la
+    // declaración mensual del contador.
     Promise.all([
       db.parametro.list("clave"),
-      db.pago_terapia.list("-created_date", 2000),
-      db.evento.list("-fecha", 1000),
-      db.subarrendamiento.list(),
+      db.pago_terapia.listAll("-created_date"),
+      db.evento.listAll("-fecha"),
+      db.subarrendamiento.listAll(),
     ])
       .then(([p, pg, ev, sub]) => {
         setParams(paramsToObject(p));

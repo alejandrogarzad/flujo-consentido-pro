@@ -79,10 +79,11 @@ export default function CitasEvaluacionesPage() {
 
   const load = useCallback(async () => {
     try {
+      // listAll() pagina internamente; .list(limit) cae al cap de 1000.
       const [p, ev, pac] = await Promise.all([
         db.parametro.list("clave"),
-        db.evento.list("-fecha", 500),
-        db.paciente.filter({ estatus: "Activo" }, "nombre", 200),
+        db.evento.listAll("-fecha"),
+        db.paciente.filter({ estatus: "Activo" }, "nombre", 1000),
       ]);
       setParams(paramsToObject(p));
       setEventos(ev);

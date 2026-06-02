@@ -59,8 +59,10 @@ export default function PacientesPage() {
 
   const load = useCallback(async () => {
     try {
+      // listAll() pagina internamente; con 200 de limit y el crecimiento del
+      // padrón, esta lista podría truncarse pronto.
       const [ps, emps] = await Promise.all([
-        db.paciente.list("-created_date", 200),
+        db.paciente.listAll("-created_date"),
         db.empleado.filter({ estatus: "Activo" }, "nombre", 200),
       ]);
       setPacientes(ps);

@@ -19,13 +19,14 @@ export default function ImpuestosPage() {
   const [overrides, setOverrides] = useState<Record<number, OverrideState>>({});
 
   useEffect(() => {
+    // listAll() pagina internamente; .list() cae al cap de 1000 de Supabase.
     Promise.all([
       db.parametro.list("clave"),
-      db.pago_terapia.list(),
-      db.evento.list(),
-      db.gasto.list(),
-      db.nomina_mensual.list(),
-      db.subarrendamiento.list(),
+      db.pago_terapia.listAll(),
+      db.evento.listAll(),
+      db.gasto.listAll(),
+      db.nomina_mensual.listAll(),
+      db.subarrendamiento.listAll(),
     ])
       .then(([p, pg, ev, g, n, s]) => {
         setParams(paramsToObject(p));

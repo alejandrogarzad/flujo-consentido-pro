@@ -51,7 +51,7 @@ export default function EmpleadosPage() {
   const load = useCallback(async () => {
     try {
       const [emp, nomDic] = await Promise.all([
-        db.empleado.list("nombre"),
+        db.empleado.listAll("nombre"),
         db.nomina_mensual.filter({ mes: 12, anio: anioActual }),
       ]);
       setEmpleados(emp);

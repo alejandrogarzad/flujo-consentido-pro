@@ -19,14 +19,17 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // listAll() pagina internamente; .list() sin limit cae al cap de 1000 de
+    // Supabase y los totales del dashboard salen incompletos cuando alguna
+    // tabla supera ese tamaño.
     Promise.all([
       db.parametro.list("clave"),
-      db.sesion_mensual.list(),
-      db.pago_terapia.list(),
-      db.evento.list(),
-      db.gasto.list(),
-      db.subarrendamiento.list(),
-      db.nomina_mensual.list(),
+      db.sesion_mensual.listAll(),
+      db.pago_terapia.listAll(),
+      db.evento.listAll(),
+      db.gasto.listAll(),
+      db.subarrendamiento.listAll(),
+      db.nomina_mensual.listAll(),
     ])
       .then(([p, s, pg, ev, g, su, n]) => {
         setParams(paramsToObject(p));

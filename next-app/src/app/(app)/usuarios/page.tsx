@@ -22,7 +22,8 @@ export default function UsuariosPage() {
   const [inviting, setInviting] = useState(false);
 
   const load = () => {
-    db.profile.list("email").then((u) => {
+    // listAll() pagina internamente. Hoy hay pocos usuarios pero futuro-proof.
+    db.profile.listAll("email").then((u) => {
       setUsuarios(u);
       setLoading(false);
     }).catch((err: any) => {

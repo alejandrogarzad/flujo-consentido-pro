@@ -107,13 +107,14 @@ export default function FlujoEfectivoPage() {
   const ANIO = new Date().getFullYear();
 
   useEffect(() => {
+    // listAll() pagina internamente; .list() cae al cap de 1000 de Supabase.
     Promise.all([
       db.parametro.list("clave"),
-      db.pago_terapia.list(),
-      db.evento.list(),
-      db.gasto.list(),
-      db.nomina_mensual.list(),
-      db.subarrendamiento.list(),
+      db.pago_terapia.listAll(),
+      db.evento.listAll(),
+      db.gasto.listAll(),
+      db.nomina_mensual.listAll(),
+      db.subarrendamiento.listAll(),
       db.empleado.filter({ estatus: "Activo" }, "nombre"),
     ])
       .then(async ([p, pg, ev, g, n, s, emps]) => {
@@ -147,7 +148,7 @@ export default function FlujoEfectivoPage() {
               });
             }));
           }
-          const nNew = await db.nomina_mensual.list();
+          const nNew = await db.nomina_mensual.listAll();
           setNomina(nNew);
         } else {
           setNomina(n);
@@ -166,12 +167,15 @@ export default function FlujoEfectivoPage() {
   }, [ANIO]);
 
   useEffect(() => {
+    // Refrescos por realtime también deben usar listAll() — si no, un cambio
+    // en realtime "tronca" el estado al cap de 1000 aunque el load inicial
+    // haya traído todo.
     const unsubs = [
-      db.nomina_mensual.subscribe(() => db.nomina_mensual.list().then(setNomina)),
-      db.gasto.subscribe(() => db.gasto.list().then(setGastos)),
-      db.pago_terapia.subscribe(() => db.pago_terapia.list().then(setPagos)),
-      db.evento.subscribe(() => db.evento.list().then(setEventos)),
-      db.subarrendamiento.subscribe(() => db.subarrendamiento.list().then(setSubarr)),
+      db.nomina_mensual.subscribe(() => db.nomina_mensual.listAll().then(setNomina)),
+      db.gasto.subscribe(() => db.gasto.listAll().then(setGastos)),
+      db.pago_terapia.subscribe(() => db.pago_terapia.listAll().then(setPagos)),
+      db.evento.subscribe(() => db.evento.listAll().then(setEventos)),
+      db.subarrendamiento.subscribe(() => db.subarrendamiento.listAll().then(setSubarr)),
     ];
     return () => unsubs.forEach((u) => u());
   }, []);

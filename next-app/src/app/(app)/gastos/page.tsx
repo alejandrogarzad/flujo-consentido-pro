@@ -46,7 +46,8 @@ export default function GastosPage() {
 
   const load = useCallback(async () => {
     try {
-      const g = await db.gasto.list("-fecha", 1000);
+      // listAll() pagina internamente; .list(1000) topa exactamente en el cap.
+      const g = await db.gasto.listAll("-fecha");
       setGastos(g);
     } catch (err: any) {
       toast.error(err?.message || "Error al cargar gastos");

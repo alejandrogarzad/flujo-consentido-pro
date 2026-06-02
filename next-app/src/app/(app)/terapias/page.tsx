@@ -16,11 +16,13 @@ export default function TerapiasPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // listAll() pagina internamente; .list(limit) cae al cap de 1000 aunque
+    // pidas más. Paciente con limit 1000 sobra hoy (catálogo crece lento).
     Promise.all([
       db.parametro.list("clave"),
-      db.sesion_mensual.list("-created_date", 2000),
-      db.pago_terapia.list("-created_date", 2000),
-      db.paciente.list("nombre", 500),
+      db.sesion_mensual.listAll("-created_date"),
+      db.pago_terapia.listAll("-created_date"),
+      db.paciente.listAll("nombre"),
     ])
       .then(([p, s, pg, pac]) => {
         setParams(paramsToObject(p));

@@ -69,8 +69,13 @@ interface EntityApi<Row> {
   // traer TODAS las filas — p.ej. cálculo de saldos arrastrados de meses
   // anteriores en cobranza. Si la tabla pasa de unas decenas de miles,
   // considera migrar a queries con filtros más estrechos.
+  // CAVEAT: el default `orderBy="-created_date"` falla en tablas sin esa
+  // columna (p.ej. `profile`). Pasa orderBy explícito en esos casos.
   listAll(orderBy?: string): Promise<Row[]>;
   filter(where: Partial<Row>, orderBy?: string, limit?: number): Promise<Row[]>;
+  // filterAll: igual que filter() pero pagina. Útil para queries con filtros
+  // amplios (p.ej. todo un año) que pueden exceder 1000 filas.
+  filterAll(where: Partial<Row>, orderBy?: string): Promise<Row[]>;
   get(id: string): Promise<Row | null>;
   create(data: Partial<Row>): Promise<Row>;
   update(id: string, data: Partial<Row>): Promise<Row>;
@@ -94,7 +99,10 @@ function buildEntity<K extends TableName>(table: K): EntityApi<TableMap[K]> {
 
     // Pagina con range(off, off+PAGE-1) hasta agotar. PAGE=1000 está al límite
     // del cap server-side por default de Supabase; si suben "Max Rows" en el
-    // dashboard, esto sigue funcionando sin cambios.
+    // dashboard, esto sigue funcionando sin cambios. Siempre agregamos `id`
+    // como segundo orden para que la paginación sea ESTABLE (sin esto, dos
+    // filas con el mismo valor en orderBy pueden saltarse o duplicarse entre
+    // páginas — bug latente que solo se manifiesta con datos reales).
     async listAll(orderBy = "-created_date") {
       const PAGE = 1000;
       const ord = parseOrderBy(orderBy);
@@ -104,6 +112,7 @@ function buildEntity<K extends TableName>(table: K): EntityApi<TableMap[K]> {
       while (off < 200000) {
         let q = supabase.from(table).select("*") as any;
         if (ord) q = q.order(ord.col, { ascending: ord.ascending });
+        q = q.order("id", { ascending: true }); // tiebreaker para paginación estable
         q = q.range(off, off + PAGE - 1);
         const { data, error } = await q;
         if (error) throw error;
@@ -124,6 +133,28 @@ function buildEntity<K extends TableName>(table: K): EntityApi<TableMap[K]> {
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as Row[];
+    },
+
+    // Paginado con filtro. Mismo patrón que listAll().
+    async filterAll(where, orderBy = "-created_date") {
+      const PAGE = 1000;
+      const ord = parseOrderBy(orderBy);
+      const acc: Row[] = [];
+      let off = 0;
+      while (off < 200000) {
+        let q = supabase.from(table).select("*") as any;
+        q = applyFilters(q, where);
+        if (ord) q = q.order(ord.col, { ascending: ord.ascending });
+        q = q.order("id", { ascending: true });
+        q = q.range(off, off + PAGE - 1);
+        const { data, error } = await q;
+        if (error) throw error;
+        const rows = (data ?? []) as Row[];
+        acc.push(...rows);
+        if (rows.length < PAGE) break;
+        off += PAGE;
+      }
+      return acc;
     },
 
     async get(id) {

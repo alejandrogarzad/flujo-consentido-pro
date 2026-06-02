@@ -42,7 +42,7 @@ export default function SubarrendamientoPage() {
   const load = useCallback(async () => {
     try {
       const [r, p] = await Promise.all([
-        db.subarrendamiento.list(),
+        db.subarrendamiento.listAll(),
         db.parametro.list("clave"),
       ]);
       setRegistros(r);

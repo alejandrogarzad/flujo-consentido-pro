@@ -39,12 +39,13 @@ export default function ResumenIngresosPage() {
 
   const cargar = useCallback(async () => {
     try {
+      // listAll() pagina internamente; .list() cae al cap de 1000 de Supabase.
       const [params, resumen, pagos, eventos, subarr] = await Promise.all([
         db.parametro.list("clave"),
         db.resumen_ingreso.filter({ anio }),
-        db.pago_terapia.list("-created_date", 500),
-        db.evento.list(),
-        db.subarrendamiento.list(),
+        db.pago_terapia.listAll("-created_date"),
+        db.evento.listAll(),
+        db.subarrendamiento.listAll(),
       ]);
       const anioFromParams = getAnioActual(params);
       if (anio !== anioFromParams) {

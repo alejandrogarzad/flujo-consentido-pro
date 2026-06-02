@@ -116,7 +116,7 @@ export default function CalendariosPage() {
       const [p, par, cals] = await Promise.all([
         db.paciente.filter({ estatus: "Activo" }, "nombre", 500),
         db.parametro.list("clave"),
-        db.calendario_paciente.list(),
+        db.calendario_paciente.listAll(),
       ]);
       const parObj = paramsToObject(par);
       const claveAsuetos = `asuetos_${anio}_${mes}`;
@@ -157,7 +157,7 @@ export default function CalendariosPage() {
   useEffect(() => {
     loadInicial();
     const unsub = db.calendario_paciente.subscribe(() => {
-      db.calendario_paciente.list().then(setCalendarios);
+      db.calendario_paciente.listAll().then(setCalendarios);
     });
     return unsub;
   }, [loadInicial]);
@@ -341,7 +341,7 @@ export default function CalendariosPage() {
         }));
       });
       await Promise.all(ops);
-      const fresh = await db.calendario_paciente.list();
+      const fresh = await db.calendario_paciente.listAll();
       setCalendarios(fresh);
       toast.success(`Asuetos guardados — ${ops.length} calendarios actualizados`);
     } catch (err: any) {
@@ -357,7 +357,7 @@ export default function CalendariosPage() {
       const calsDelMes = await db.calendario_paciente.filter({ anio, mes });
       const asietosParam = await db.parametro.filter({ clave: `asuetos_${anio}_${mes}` });
       const asietosStr = asietosParam[0]?.valor ?? "";
-      const allPacs = await db.paciente.list("nombre", 500);
+      const allPacs = await db.paciente.listAll("nombre");
       const pacMap = Object.fromEntries(allPacs.map((p) => [p.id, p]));
       const precioGlobal = Number(params.precio_terapia_regular ?? 1100);
       const ivaRate = Number(params.iva ?? 0.16);
@@ -404,7 +404,7 @@ export default function CalendariosPage() {
           }));
         });
       await Promise.all(ops);
-      const fresh = await db.calendario_paciente.list();
+      const fresh = await db.calendario_paciente.listAll();
       setCalendarios(fresh);
       toast.success(`Recalculados ${ops.length} calendarios con 0 sesiones`);
     } catch (err: any) {
@@ -472,7 +472,7 @@ export default function CalendariosPage() {
         });
         creados.push(p.nombre);
       }
-      const fresh = await db.calendario_paciente.list();
+      const fresh = await db.calendario_paciente.listAll();
       setCalendarios(fresh);
       toast.success(`✓ ${MESES[mes - 1]} ${anio}: creados ${creados.length}, omitidos ${aplicantes.length - faltantes.length}`);
     } catch (err: any) {
@@ -487,8 +487,8 @@ export default function CalendariosPage() {
     setLimpiando(true);
     try {
       const [allCals, allPacs] = await Promise.all([
-        db.calendario_paciente.list(),
-        db.paciente.list("nombre", 500),
+        db.calendario_paciente.listAll(),
+        db.paciente.listAll("nombre"),
       ]);
       const pacMap = Object.fromEntries(allPacs.map((p) => [p.id, p]));
       const huerfanos = allCals.filter((cal) => {
@@ -498,7 +498,7 @@ export default function CalendariosPage() {
       for (const cal of huerfanos) {
         await db.calendario_paciente.delete(cal.id);
       }
-      const fresh = await db.calendario_paciente.list();
+      const fresh = await db.calendario_paciente.listAll();
       setCalendarios(fresh);
       toast.success(huerfanos.length === 0 ? "Sin calendarios huérfanos" : `Eliminados ${huerfanos.length} calendarios huérfanos`);
     } catch (err: any) {

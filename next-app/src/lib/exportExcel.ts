@@ -1317,16 +1317,19 @@ function pestTablas(wb: ExcelJS.Workbook) {
 // ============================================================================
 
 export async function generarExcelRespaldo(anio: number): Promise<Blob> {
+  // listAll() pagina internamente — Supabase capa server-side a 1000 filas
+  // aunque pidas más. CRÍTICO para el Excel del contador: si se trunca, el
+  // Excel sale con cifras incompletas y el contador toma decisiones mal.
   const [parametros, pacientesRaw, empleados, sesiones, pagos, eventos, subarr, gastos, nomina] = await Promise.all([
     db.parametro.list("clave"),
-    db.paciente.list("nombre", 1000),
-    db.empleado.list("nombre", 200),
-    db.sesion_mensual.list("-created_date", 5000),
-    db.pago_terapia.list("-created_date", 5000),
-    db.evento.list("-fecha", 2000),
-    db.subarrendamiento.list("-created_date", 500),
-    db.gasto.list("-fecha", 10000),
-    db.nomina_mensual.list("-created_date", 2000),
+    db.paciente.listAll("nombre"),
+    db.empleado.listAll("nombre"),
+    db.sesion_mensual.listAll("-created_date"),
+    db.pago_terapia.listAll("-created_date"),
+    db.evento.listAll("-fecha"),
+    db.subarrendamiento.listAll("-created_date"),
+    db.gasto.listAll("-fecha"),
+    db.nomina_mensual.listAll("-created_date"),
   ]);
 
   const pacientes = dedupPacientes(pacientesRaw);
