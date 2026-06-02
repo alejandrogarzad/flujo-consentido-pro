@@ -167,11 +167,20 @@ export default function CobranzaPage() {
   const cargarMes = useCallback(async () => {
     if (Object.keys(params).length === 0) return;
     try {
+      // IMPORTANTE: los límites de allPagos / allCals deben superar el total
+      // en BD. Si truncan, el cálculo de "Saldo previo" del mes filtrado no
+      // encuentra el calendario real de mayo y cae al fallback de
+      // `dias_sesion`, que ignora excepciones (días feriados, asuetos) y
+      // genera deudas fantasma. Caso real reportado: con 1029 cals en BD y
+      // limit=1000, a Andrés Gómez le faltaba su cal de mayo, el fallback
+      // contaba 9 sesiones (4 mié + 5 vie) en vez de 8, y junio mostraba
+      // -$1,100 que no existía. Mantener estos números MUY por encima del
+      // crecimiento esperado de la BD.
       const [cals, allPagos, allCals, allPacientes] = await Promise.all([
         db.calendario_paciente.filter({ mes: filtroMes, anio: filtroAnio }),
-        db.pago_terapia.list("-created_date", 500),
-        db.calendario_paciente.list("-created_date", 1000),
-        db.paciente.filter({ estatus: "Activo" }, "nombre", 300),
+        db.pago_terapia.list("-created_date", 20000),
+        db.calendario_paciente.list("-created_date", 20000),
+        db.paciente.filter({ estatus: "Activo" }, "nombre", 1000),
       ]);
       setPacientes(allPacientes);
 
