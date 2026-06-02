@@ -64,6 +64,12 @@ function applyFilters<T extends object>(
 
 interface EntityApi<Row> {
   list(orderBy?: string, limit?: number): Promise<Row[]>;
+  // listAll: pagina automáticamente para sortear el cap server-side de
+  // Supabase (default 1000 filas/query). Úsala cuando necesites GARANTÍA de
+  // traer TODAS las filas — p.ej. cálculo de saldos arrastrados de meses
+  // anteriores en cobranza. Si la tabla pasa de unas decenas de miles,
+  // considera migrar a queries con filtros más estrechos.
+  listAll(orderBy?: string): Promise<Row[]>;
   filter(where: Partial<Row>, orderBy?: string, limit?: number): Promise<Row[]>;
   get(id: string): Promise<Row | null>;
   create(data: Partial<Row>): Promise<Row>;
@@ -84,6 +90,29 @@ function buildEntity<K extends TableName>(table: K): EntityApi<TableMap[K]> {
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as Row[];
+    },
+
+    // Pagina con range(off, off+PAGE-1) hasta agotar. PAGE=1000 está al límite
+    // del cap server-side por default de Supabase; si suben "Max Rows" en el
+    // dashboard, esto sigue funcionando sin cambios.
+    async listAll(orderBy = "-created_date") {
+      const PAGE = 1000;
+      const ord = parseOrderBy(orderBy);
+      const acc: Row[] = [];
+      let off = 0;
+      // Guard: tope absoluto de 200k para no colgar el browser si algo va mal.
+      while (off < 200000) {
+        let q = supabase.from(table).select("*") as any;
+        if (ord) q = q.order(ord.col, { ascending: ord.ascending });
+        q = q.range(off, off + PAGE - 1);
+        const { data, error } = await q;
+        if (error) throw error;
+        const rows = (data ?? []) as Row[];
+        acc.push(...rows);
+        if (rows.length < PAGE) break;
+        off += PAGE;
+      }
+      return acc;
     },
 
     async filter(where, orderBy = "-created_date", limit) {

@@ -167,19 +167,20 @@ export default function CobranzaPage() {
   const cargarMes = useCallback(async () => {
     if (Object.keys(params).length === 0) return;
     try {
-      // IMPORTANTE: los límites de allPagos / allCals deben superar el total
-      // en BD. Si truncan, el cálculo de "Saldo previo" del mes filtrado no
-      // encuentra el calendario real de mayo y cae al fallback de
-      // `dias_sesion`, que ignora excepciones (días feriados, asuetos) y
-      // genera deudas fantasma. Caso real reportado: con 1029 cals en BD y
-      // limit=1000, a Andrés Gómez le faltaba su cal de mayo, el fallback
-      // contaba 9 sesiones (4 mié + 5 vie) en vez de 8, y junio mostraba
-      // -$1,100 que no existía. Mantener estos números MUY por encima del
-      // crecimiento esperado de la BD.
+      // IMPORTANTE: usamos listAll() (paginado) en lugar de list(limit),
+      // porque Supabase tiene un cap server-side de 1000 filas por query.
+      // Si la tabla pasa de 1000, list("-created_date", 20000) regresa solo
+      // 1000 — y los 29+ calendarios más viejos quedan fuera. Eso causaba
+      // que el "Saldo previo" de mayo no encontrara el cal real de algunos
+      // pacientes, cayera al fallback de `dias_sesion`, ignorara las
+      // excepciones del calendario (feriados, asuetos), y generara deudas
+      // fantasma. Caso real reportado: Andrés Gómez Escamilla con cal real
+      // de 8 sesiones (excepción día 1), fallback contaba 9 (4 mié + 5 vie),
+      // saldo fantasma de -$1,100 arrastrado a junio.
       const [cals, allPagos, allCals, allPacientes] = await Promise.all([
         db.calendario_paciente.filter({ mes: filtroMes, anio: filtroAnio }),
-        db.pago_terapia.list("-created_date", 20000),
-        db.calendario_paciente.list("-created_date", 20000),
+        db.pago_terapia.listAll("-created_date"),
+        db.calendario_paciente.listAll("-created_date"),
         db.paciente.filter({ estatus: "Activo" }, "nombre", 1000),
       ]);
       setPacientes(allPacientes);
