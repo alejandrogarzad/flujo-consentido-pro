@@ -15,6 +15,9 @@ const ALLOWED_PATHS: Record<AppRole, string[] | null> = {
   cap_terapias: ["/captura-terapias"],
   cap_pagos: ["/cobranza", "/citas-evaluaciones"],
   cap_gastos: ["/captura-gasto"],
+  // El contador (rol de solo lectura) entra exclusivamente a "Para el
+  // Contador" para descargar la declaración mensual. Nada más.
+  contador: ["/para-contador"],
 };
 
 export function canAccess(role: AppRole | null | undefined, path: string): boolean {

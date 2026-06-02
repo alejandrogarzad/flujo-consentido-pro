@@ -11,6 +11,7 @@ const ROLES: { value: AppRole; label: string; desc: string }[] = [
   { value: "cap_terapias", label: "Capturista Terapias", desc: "Solo puede capturar sesiones mensuales" },
   { value: "cap_pagos", label: "Capturista Pagos", desc: "Solo puede registrar pagos y ver cobranza" },
   { value: "cap_gastos", label: "Capturista Gastos", desc: "Solo puede registrar gastos" },
+  { value: "contador", label: "Contador", desc: "Solo accede a Para el Contador (declaración mensual)" },
 ];
 
 export default function UsuariosPage() {

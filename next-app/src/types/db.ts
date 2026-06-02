@@ -36,7 +36,7 @@ export type CategoriaGasto =
 
 export type TipoParametro = "numero" | "porcentaje" | "dinero" | "texto";
 
-export type AppRole = "admin" | "user" | "cap_terapias" | "cap_pagos" | "cap_gastos";
+export type AppRole = "admin" | "user" | "cap_terapias" | "cap_pagos" | "cap_gastos" | "contador";
 
 export type DiaSemana = "lunes" | "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
 
