@@ -562,8 +562,18 @@ export default function CobranzaPage() {
                           </span>
                         )}
                       </td>
-                      <td className={`px-4 py-3 text-right font-medium ${row.saldo !== null && row.saldo > 0 ? "text-red-600" : "text-green-600"}`}>
-                        {row.saldo !== null ? fmtMXN(Math.max(0, row.saldo)) : <span className="text-stone-300">—</span>}
+                      <td className="px-4 py-3 text-right font-medium">
+                        {row.saldo === null ? (
+                          <span className="text-stone-300">—</span>
+                        ) : row.saldo > 0 ? (
+                          <span className="text-red-600">{fmtMXN(row.saldo)}</span>
+                        ) : row.saldo < 0 ? (
+                          <span className="text-blue-600" title="Pagó de más — saldo a favor que se arrastra al mes siguiente">
+                            +{fmtMXN(-row.saldo)} a favor
+                          </span>
+                        ) : (
+                          <span className="text-green-600">{fmtMXN(0)}</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${colorMap[row.estatus.color]}`}>
