@@ -82,16 +82,29 @@ export default function ParaContadorPage() {
   const totalTerapiasFact = terapiasFacturables.reduce((s, r) => s + r.total, 0);
   const totalTerapiasEfv = terapiasEfectivo.reduce((s, r) => s + r.total, 0);
 
+  // Eventos (citas/evaluaciones) — REGLA SAT (régimen de flujo de efectivo):
+  // 1. Solo cuenta lo COBRADO. Eventos sin pago (monto_pagado <= 0) NO se
+  //    incluyen aunque tengan forma_pago "Transferencia" — la factura solo
+  //    se emite cuando entra el dinero.
+  // 2. Se filtra por `fecha_pago` (mes en que entró el dinero), NO por
+  //    `fecha` (mes del servicio). Una cita del 30/may cobrada el 5/jun
+  //    aparece en JUNIO, que es cuando se causa el IVA.
+  // 3. Subtotal e IVA salen de `monto_pagado / (1+iva)` — NO de `precio_base`,
+  //    porque lo facturado es lo realmente cobrado, no el precio teórico
+  //    (un pago parcial $580 factura $500 + $80 IVA, no $1000 + $160).
   const eventosMes = eventos.filter((ev) => {
-    const d = (parseFechaLocal(ev.fecha) ?? new Date(0));
+    if (!ev.fecha_pago) return false;
+    if (Number(ev.monto_pagado || 0) <= 0) return false;
+    const d = parseFechaLocal(ev.fecha_pago);
+    if (!d) return false;
     return d.getMonth() + 1 === mes && d.getFullYear() === anio;
   });
   const eventosFacturables = eventosMes.filter((ev) => esFacturable(ev.forma_pago));
   const eventosEfectivo = eventosMes.filter((ev) => !esFacturable(ev.forma_pago));
 
-  const subtotalEventosFact = eventosFacturables.reduce((s, ev) => s + Number(ev.precio_base || 0), 0);
-  const ivaEventosFact = subtotalEventosFact * ivaRate;
-  const totalEventosFact = subtotalEventosFact + ivaEventosFact;
+  const totalEventosFact = eventosFacturables.reduce((s, ev) => s + Number(ev.monto_pagado || 0), 0);
+  const subtotalEventosFact = totalEventosFact / (1 + ivaRate);
+  const ivaEventosFact = totalEventosFact - subtotalEventosFact;
   const totalEventosEfv = eventosEfectivo.reduce((s, ev) => s + Number(ev.monto_pagado || 0), 0);
 
   const subarrMes = subarr.filter((s) => s.mes === mes && s.anio === anio);
@@ -262,9 +275,12 @@ export default function ParaContadorPage() {
               )}
               {eventosMes.map((ev, i) => {
                 const facturable = esFacturable(ev.forma_pago);
-                const subtotal = Number(ev.precio_base || 0);
-                const iva = facturable ? subtotal * ivaRate : 0;
-                const total = subtotal + iva;
+                // Subtotal/IVA salen de lo realmente COBRADO (monto_pagado),
+                // no del precio teórico (precio_base). Consistente con el
+                // régimen de flujo de efectivo.
+                const total = Number(ev.monto_pagado || 0);
+                const subtotal = facturable ? total / (1 + ivaRate) : total;
+                const iva = facturable ? total - subtotal : 0;
                 return (
                   <tr key={i} className={`border-t border-stone-50 ${!facturable ? "opacity-40" : "hover:bg-amber-50/30"}`}>
                     <td className="px-4 py-2.5 font-medium text-stone-800">{ev.nombre_paciente}</td>

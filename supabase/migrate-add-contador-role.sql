@@ -7,16 +7,16 @@
 --
 -- INSTRUCCIONES:
 -- 1. Abrir Supabase Dashboard → SQL Editor.
--- 2. Pegar y ejecutar este archivo COMPLETO.
--- 3. Verificar al final que el rol se agregó (la última SELECT lo lista).
+-- 2. Pegar y ejecutar SOLO la línea del ALTER TYPE (la única abajo).
+-- 3. Para VERIFICAR, abrir UNA NUEVA query (otra ejecución) y correr:
+--      SELECT unnest(enum_range(NULL::app_role_enum));
+--    Postgres exige que ALTER TYPE ENUM se "committee" antes de poder usar
+--    el nuevo valor — si lo metes en la misma transacción/run, falla con
+--    "unsafe use of new value" y REVIERTE TODO (incluyendo el ALTER).
 -- 4. Entrar a /usuarios en la app e invitar al contador con rol "Contador".
 --
--- SAFE: ADD VALUE es idempotente con IF NOT EXISTS — corre dos veces sin
+-- SAFE: ADD VALUE con IF NOT EXISTS es idempotente. Corre dos veces sin
 -- error. No toca filas existentes.
 -- =============================================================================
 
--- 1) Agregar el nuevo valor al enum (idempotente).
 ALTER TYPE app_role_enum ADD VALUE IF NOT EXISTS 'contador';
-
--- 2) Verificar que quedó.
-SELECT unnest(enum_range(NULL::app_role_enum)) AS roles_disponibles;
