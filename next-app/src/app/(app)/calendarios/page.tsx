@@ -518,8 +518,10 @@ export default function CalendariosPage() {
         import("html2canvas"),
         import("jspdf"),
       ]);
-      const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: "#ffffff", logging: false });
-      const imgData = canvas.toDataURL("image/png");
+      // scale 2 = ~200 DPI a tamaño carta (nítido para imprimir) y JPEG en lugar de
+      // PNG: baja el peso del PDF de ~22 MB a unos cientos de KB sin pérdida visible.
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false });
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
@@ -528,7 +530,7 @@ export default function CalendariosPage() {
       const contentH = (canvas.height * contentW) / canvas.width;
       pdf.setFillColor(255, 255, 255);
       pdf.rect(0, 0, pageW, pageH, "F");
-      pdf.addImage(imgData, "PNG", margin, margin, contentW, contentH);
+      pdf.addImage(imgData, "JPEG", margin, margin, contentW, contentH, undefined, "FAST");
       pdf.setFontSize(7);
       pdf.setTextColor(43, 196, 174);
       pdf.text("Centro Con-sentido — anapaula@centroconsentido.com", pageW / 2, pageH - 5, { align: "center" });
@@ -777,22 +779,22 @@ export default function CalendariosPage() {
                             <span style={{ color: "#a6a299", fontSize: "10px", fontWeight: 800 }}>{celda.dia}</span>
                             {esReposicion && (
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "2px", gap: "2px" }}>
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#5DC97B", color: "white", borderRadius: "7px", height: "17px", fontSize: "9px", fontWeight: 800, width: "100%", boxSizing: "border-box", lineHeight: 1 }}>
+                                <div style={{ display: "block", background: "#5DC97B", color: "white", borderRadius: "7px", height: "16px", lineHeight: "16px", fontSize: "9px", fontWeight: 800, width: "100%", textAlign: "center", boxSizing: "border-box" }}>
                                   {repoData.hora}
                                 </div>
-                                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "7.5px", color: "white", fontWeight: 800, background: "#1E7C42", borderRadius: "5px", padding: "2px 6px", letterSpacing: "0.5px", lineHeight: 1 }}>REP</span>
+                                <span style={{ display: "inline-block", fontSize: "7.5px", color: "white", fontWeight: 800, background: "#1E7C42", borderRadius: "5px", padding: "1px 7px", lineHeight: "11px", letterSpacing: "0.5px" }}>REP</span>
                                 {repoData.tipoRep === "Matutina" && (
-                                  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "7.5px", color: "white", fontWeight: 800, background: "#B5790E", borderRadius: "5px", padding: "2px 6px", letterSpacing: "0.5px", lineHeight: 1 }}>MAT</span>
+                                  <span style={{ display: "inline-block", fontSize: "7.5px", color: "white", fontWeight: 800, background: "#B5790E", borderRadius: "5px", padding: "1px 7px", lineHeight: "11px", letterSpacing: "0.5px" }}>MAT</span>
                                 )}
                               </div>
                             )}
                             {!esReposicion && celda.tipo === "sesion" && celda.diaSemana !== undefined && (
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "2px", gap: "2px" }}>
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2BC4AE", color: "white", borderRadius: "7px", height: "17px", fontSize: "9px", fontWeight: 800, width: "100%", boxSizing: "border-box", lineHeight: 1 }}>
+                                <div style={{ display: "block", background: "#2BC4AE", color: "white", borderRadius: "7px", height: "16px", lineHeight: "16px", fontSize: "9px", fontWeight: 800, width: "100%", textAlign: "center", boxSizing: "border-box" }}>
                                   {celda.hora}
                                 </div>
                                 {(tipoSesion[DIAS_KEY[celda.diaSemana]] ?? "Regular") === "Matutina" && (
-                                  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "7.5px", color: "white", fontWeight: 800, background: "#B5790E", borderRadius: "5px", padding: "2px 6px", letterSpacing: "0.5px", lineHeight: 1 }}>MAT</span>
+                                  <span style={{ display: "inline-block", fontSize: "7.5px", color: "white", fontWeight: 800, background: "#B5790E", borderRadius: "5px", padding: "1px 7px", lineHeight: "11px", letterSpacing: "0.5px" }}>MAT</span>
                                 )}
                               </div>
                             )}
