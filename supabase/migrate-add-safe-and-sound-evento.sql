@@ -1,0 +1,23 @@
+-- =============================================================================
+-- migrate-add-safe-and-sound-evento.sql
+--
+-- Agrega el tipo de evento "Safe and Sound" al enum tipo_evento_enum, para
+-- registrar el programa especial Safe and Sound en la pestaña Citas y
+-- Evaluaciones. Se captura como un evento puntual (igual que una cita): precio
+-- editable, IVA si la forma de pago no es efectivo. Si el programa dura varios
+-- meses, se da de alta un evento por mes.
+--
+-- INSTRUCCIONES:
+-- 1. Abrir Supabase Dashboard → SQL Editor.
+-- 2. Pegar y ejecutar SOLO la línea del ALTER TYPE (la única abajo).
+-- 3. Para VERIFICAR, abrir UNA NUEVA query (otra ejecución) y correr:
+--      SELECT unnest(enum_range(NULL::tipo_evento_enum));
+--    Postgres exige que ALTER TYPE ENUM se "committee" antes de poder usar el
+--    nuevo valor — si lo metes en la misma transacción/run, falla con
+--    "unsafe use of new value" y REVIERTE TODO (incluyendo el ALTER).
+--
+-- SAFE: ADD VALUE con IF NOT EXISTS es idempotente. Corre dos veces sin error.
+-- No toca filas existentes.
+-- =============================================================================
+
+ALTER TYPE tipo_evento_enum ADD VALUE IF NOT EXISTS 'Safe and Sound';

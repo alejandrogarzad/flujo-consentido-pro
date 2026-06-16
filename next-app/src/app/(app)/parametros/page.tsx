@@ -23,6 +23,7 @@ const DEFAULTS: ParamDef[] = [
   { clave: "precio_observacion_escolar",     valor: "2800",   descripcion: "Precio observación escolar", tipo: "dinero" },
   { clave: "precio_reporte_adicional",       valor: "3000",   descripcion: "Precio reporte adicional", tipo: "dinero" },
   { clave: "precio_evaluacion",              valor: "8500",   descripcion: "Precio evaluación", tipo: "dinero" },
+  { clave: "precio_safe_and_sound",          valor: "0",      descripcion: "Precio programa Safe and Sound", tipo: "dinero" },
   { clave: "iva",                            valor: "0.16",   descripcion: "Tasa de IVA (0.16 = 16%)", tipo: "porcentaje" },
   { clave: "recargo_pago_tarde",             valor: "0.10",   descripcion: "Recargo por pago tardío (0.10 = 10%)", tipo: "porcentaje" },
   { clave: "dia_tope_pago",                  valor: "10",     descripcion: "Día del mes tope para pago sin recargo", tipo: "numero" },
@@ -35,10 +36,10 @@ const DEFAULTS: ParamDef[] = [
 ];
 
 const GROUPS: { title: string; claves: string[] }[] = [
-  { title: "Precios de Servicios",     claves: DEFAULTS.slice(0, 9).map((d) => d.clave) },
-  { title: "Tasas y Reglas de Cobro",  claves: DEFAULTS.slice(9, 12).map((d) => d.clave) },
-  { title: "Impuestos y Nómina",       claves: DEFAULTS.slice(12, 16).map((d) => d.clave) },
-  { title: "General",                  claves: DEFAULTS.slice(16).map((d) => d.clave) },
+  { title: "Precios de Servicios",     claves: DEFAULTS.slice(0, 10).map((d) => d.clave) },
+  { title: "Tasas y Reglas de Cobro",  claves: DEFAULTS.slice(10, 13).map((d) => d.clave) },
+  { title: "Impuestos y Nómina",       claves: DEFAULTS.slice(13, 17).map((d) => d.clave) },
+  { title: "General",                  claves: DEFAULTS.slice(17).map((d) => d.clave) },
 ];
 
 export default function ParametrosPage() {

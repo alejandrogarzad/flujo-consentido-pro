@@ -197,6 +197,7 @@ export function calcularTotalEvento(evento: EventoCobranza, params: ParamMap): R
     "Observación escolar":            Number(params.precio_observacion_escolar ?? 2800),
     "Reporte adicional":              Number(params.precio_reporte_adicional ?? 3000),
     "Evaluación":                     Number(params.precio_evaluacion ?? 8500),
+    "Safe and Sound":                 Number(params.precio_safe_and_sound ?? 0),
   };
   const precioBase = Number(evento.precio_base) || precios[evento.tipo] || 0;
   const conIva = evento.forma_pago !== "Efectivo";

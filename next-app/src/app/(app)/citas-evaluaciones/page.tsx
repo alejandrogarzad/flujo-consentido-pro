@@ -12,6 +12,7 @@ import type { Evento, FormaPago, Paciente, TipoEvento } from "@/types/db";
 
 const TIPOS_CITAS: TipoEvento[] = ["Cita inicial / ingreso", "Cita seguimiento directora", "Cita escolar virtual", "Cita escolar presencial", "Observación escolar", "Reporte adicional"];
 const TIPOS_EVALUACIONES: TipoEvento[] = ["Evaluación"];
+const TIPOS_SAFE_SOUND: TipoEvento[] = ["Safe and Sound"];
 const FORMAS_PAGO: FormaPago[] = ["Efectivo", "Transferencia", "Tarjeta", "Depósito"];
 const TIPOS_CON_PACIENTE: TipoEvento[] = ["Cita seguimiento directora", "Cita escolar virtual", "Cita escolar presencial", "Observación escolar", "Reporte adicional"];
 
@@ -42,7 +43,7 @@ export default function CitasEvaluacionesPage() {
   const [params, setParams] = useState<ParamMap>({});
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
-  const [tab, setTab] = useState<"citas" | "evaluaciones">("citas");
+  const [tab, setTab] = useState<"citas" | "evaluaciones" | "safe">("citas");
   const [filtroMes, setFiltroMes] = useState(new Date().getMonth() + 1);
   const [filtroAnio, setFiltroAnio] = useState(new Date().getFullYear());
   const [showForm, setShowForm] = useState(false);
@@ -75,6 +76,7 @@ export default function CitasEvaluacionesPage() {
     "Observación escolar": Number(params.precio_observacion_escolar ?? 2800),
     "Reporte adicional": Number(params.precio_reporte_adicional ?? 3000),
     "Evaluación": Number(params.precio_evaluacion ?? 8500),
+    "Safe and Sound": Number(params.precio_safe_and_sound ?? 0),
   };
 
   const load = useCallback(async () => {
@@ -102,7 +104,7 @@ export default function CitasEvaluacionesPage() {
     db.auth.me().then(setUser);
   }, [load]);
 
-  const tiposPermitidos = tab === "citas" ? TIPOS_CITAS : TIPOS_EVALUACIONES;
+  const tiposPermitidos = tab === "citas" ? TIPOS_CITAS : tab === "evaluaciones" ? TIPOS_EVALUACIONES : TIPOS_SAFE_SOUND;
 
   const openNew = () => {
     const fechaInicial = `${filtroAnio}-${String(filtroMes).padStart(2, "0")}-01`;
@@ -186,7 +188,8 @@ export default function CitasEvaluacionesPage() {
   };
   const citas = eventos.filter((ev) => TIPOS_CITAS.includes(ev.tipo) && matchMes(ev));
   const evaluaciones = eventos.filter((ev) => TIPOS_EVALUACIONES.includes(ev.tipo) && matchMes(ev));
-  const eventosMostrados = tab === "citas" ? citas : evaluaciones;
+  const safeSound = eventos.filter((ev) => TIPOS_SAFE_SOUND.includes(ev.tipo) && matchMes(ev));
+  const eventosMostrados = tab === "citas" ? citas : tab === "evaluaciones" ? evaluaciones : safeSound;
 
   if (loading) {
     return (
@@ -219,14 +222,14 @@ export default function CitasEvaluacionesPage() {
           />
           {canNew && (
             <button onClick={openNew} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-xl">
-              <Plus size={16} /> {tab === "citas" ? "Nueva Cita" : "Nueva Evaluación"}
+              <Plus size={16} /> {tab === "citas" ? "Nueva Cita" : tab === "evaluaciones" ? "Nueva Evaluación" : "Nuevo Safe and Sound"}
             </button>
           )}
         </div>
       </div>
 
       <div className="flex gap-1 mb-5 bg-stone-100 rounded-xl p-1 w-fit">
-        {([{ key: "citas", label: `Citas (${citas.length})` }, { key: "evaluaciones", label: `Evaluaciones (${evaluaciones.length})` }] as const).map((t) => (
+        {([{ key: "citas", label: `Citas (${citas.length})` }, { key: "evaluaciones", label: `Evaluaciones (${evaluaciones.length})` }, { key: "safe", label: `Safe and Sound (${safeSound.length})` }] as const).map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t.key ? "bg-white text-violet-700 shadow-sm" : "text-stone-500 hover:text-stone-700"}`}>
             {t.label}
@@ -310,7 +313,13 @@ function EventoModal({
   pacientes: Paciente[];
   tiposPermitidos: TipoEvento[];
 }) {
-  const usaDropdown = TIPOS_CON_PACIENTE.includes(form.tipo);
+  const esSafe = form.tipo === "Safe and Sound";
+  // Safe and Sound: la capturista elige si es paciente actual (dropdown) o nuevo (texto libre).
+  // Al editar, arranca en "nuevo" si el nombre guardado no está en la lista de pacientes activos.
+  const [pacienteNuevo, setPacienteNuevo] = useState(
+    esSafe && !!form.nombre_paciente && !pacientes.some((p) => p.nombre === form.nombre_paciente)
+  );
+  const usaDropdown = esSafe ? !pacienteNuevo : TIPOS_CON_PACIENTE.includes(form.tipo);
   const fechaObj = form.fecha ? new Date(form.fecha + "T12:00:00") : new Date();
   const mesSel = fechaObj.getMonth() + 1;
   const anioSel = fechaObj.getFullYear();
@@ -345,7 +354,17 @@ function EventoModal({
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-stone-500 block mb-1">{usaDropdown ? "Paciente" : "Nombre del paciente / solicitante"}</label>
+            <label className="text-xs font-medium text-stone-500 block mb-1">{usaDropdown ? "Paciente" : esSafe ? "Nombre del paciente nuevo" : "Nombre del paciente / solicitante"}</label>
+            {esSafe && (
+              <div className="flex gap-1 mb-2 bg-stone-100 rounded-lg p-1 w-fit">
+                {([{ k: false, l: "Paciente actual" }, { k: true, l: "Paciente nuevo" }] as const).map((o) => (
+                  <button key={o.l} type="button" onClick={() => { setPacienteNuevo(o.k); setForm({ ...form, nombre_paciente: "" }); }}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${pacienteNuevo === o.k ? "bg-white text-violet-700 shadow-sm" : "text-stone-500 hover:text-stone-700"}`}>
+                    {o.l}
+                  </button>
+                ))}
+              </div>
+            )}
             {usaDropdown ? (
               <select value={form.nombre_paciente} onChange={(e) => setForm({ ...form, nombre_paciente: e.target.value })}
                 className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200">
@@ -354,6 +373,7 @@ function EventoModal({
               </select>
             ) : (
               <input value={form.nombre_paciente} onChange={(e) => setForm({ ...form, nombre_paciente: e.target.value })}
+                placeholder={esSafe ? "Nombre del paciente nuevo" : undefined}
                 className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200" />
             )}
           </div>

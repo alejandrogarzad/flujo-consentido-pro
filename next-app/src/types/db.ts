@@ -20,7 +20,8 @@ export type TipoEvento =
   | "Cita escolar presencial"
   | "Observación escolar"
   | "Reporte adicional"
-  | "Evaluación";
+  | "Evaluación"
+  | "Safe and Sound";
 
 export type CategoriaGasto =
   | "Renta"
