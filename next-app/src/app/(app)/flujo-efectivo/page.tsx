@@ -466,7 +466,7 @@ export default function FlujoEfectivoPage() {
             <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
             <Tooltip formatter={(v: number) => fmtMXN(v)} />
-            <Line dataKey="saldoFinal" name="Saldo Final" stroke="#7c3aed" strokeWidth={2} dot={{ r: 3 }} />
+            <Line dataKey="saldoFinal" name="Saldo Final" stroke="#2BC4AE" strokeWidth={2} dot={{ r: 3 }} />
             <Line dataKey="ingresos" name="Ingresos" stroke="#22c55e" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
             <Line dataKey="egresos" name="Egresos" stroke="#f87171" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
           </LineChart>

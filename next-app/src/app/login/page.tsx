@@ -4,6 +4,7 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { db } from "@/lib/db";
 import { Loader2 } from "lucide-react";
+import { BrandLogo } from "@/components/ConsentidoLogo";
 
 function LoginForm() {
   const router = useRouter();
@@ -34,10 +35,12 @@ function LoginForm() {
     <main className="min-h-screen flex items-center justify-center bg-stone-50 p-6">
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-sm bg-white border border-stone-100 rounded-2xl shadow-sm p-6"
+        className="w-full max-w-sm bg-white border border-stone-100 rounded-2xl shadow-sm p-7"
       >
-        <h1 className="text-xl font-bold text-stone-800 mb-1">Flujo Consentido</h1>
-        <p className="text-sm text-stone-500 mb-6">Inicia sesión para continuar</p>
+        <div className="flex justify-center mb-2">
+          <BrandLogo size={128} />
+        </div>
+        <p className="text-sm text-stone-500 mb-6 text-center">Inicia sesión para continuar</p>
 
         <label className="block text-xs font-medium text-stone-600 mb-1">Correo</label>
         <input

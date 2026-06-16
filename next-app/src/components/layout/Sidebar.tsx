@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { db, type AuthUser } from "@/lib/db";
 import { canAccess } from "@/lib/permissions";
+import { routeColor } from "@/lib/brand";
+import { BrandLogo } from "@/components/ConsentidoLogo";
 
 const NAV_ITEMS = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -63,7 +65,7 @@ export default function Sidebar() {
         <button onClick={() => setOpen(true)} className="text-stone-500">
           <Menu size={20} />
         </button>
-        <span className="font-bold text-violet-700">Flujo Consentido</span>
+        <BrandLogo size={34} />
       </div>
 
       <aside
@@ -74,9 +76,10 @@ export default function Sidebar() {
           md:translate-x-0 md:static md:z-auto
         `}
       >
-        <div className="px-4 py-4 border-b border-stone-100 flex items-center justify-between">
-          <span className="font-bold text-violet-700 text-lg">Flujo Consentido</span>
-          <button className="md:hidden text-stone-400" onClick={() => setOpen(false)}>
+        <div className="px-4 py-4 border-b border-stone-100 relative flex flex-col items-center">
+          <BrandLogo size={92} />
+          <div className="text-[11px] font-semibold text-stone-400 mt-1 tracking-wide">Centro Terapéutico</div>
+          <button className="md:hidden text-stone-400 absolute top-3 right-3" onClick={() => setOpen(false)}>
             <X size={18} />
           </button>
         </div>
@@ -84,19 +87,19 @@ export default function Sidebar() {
         <nav className="flex-1 overflow-y-auto py-4 px-3">
           {NAV_ITEMS.filter((item) => !user || canAccess(user.role, item.path)).map(({ path, label, icon: Icon }) => {
             const active = pathname === path || pathname.startsWith(`${path}/`);
+            const c = routeColor(path);
             return (
               <Link
                 key={path}
                 href={path}
                 onClick={() => setOpen(false)}
+                style={active ? { background: c.soft, color: c.text } : undefined}
                 className={`
-                  flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 text-sm font-medium transition-all
-                  ${active
-                    ? "bg-violet-50 text-violet-700"
-                    : "text-stone-500 hover:bg-stone-50 hover:text-stone-800"}
+                  flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5 text-sm font-semibold transition-all
+                  ${active ? "" : "text-stone-500 hover:bg-stone-50 hover:text-stone-800"}
                 `}
               >
-                <Icon size={16} />
+                <Icon size={17} style={{ color: c.base }} />
                 <span className="flex-1">{label}</span>
                 {active && <ChevronRight size={14} />}
               </Link>

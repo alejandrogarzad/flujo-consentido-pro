@@ -12,6 +12,7 @@ import {
 import type {
   CalendarioPaciente, DiaSemana, HorarioSemanal, Paciente, Reposicion, TipoSesionSemanal,
 } from "@/types/db";
+import { BrandLogo } from "@/components/ConsentidoLogo";
 
 const DIAS_KEY: DiaSemana[] = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
 
@@ -529,7 +530,7 @@ export default function CalendariosPage() {
       pdf.rect(0, 0, pageW, pageH, "F");
       pdf.addImage(imgData, "PNG", margin, margin, contentW, contentH);
       pdf.setFontSize(7);
-      pdf.setTextColor(160, 130, 210);
+      pdf.setTextColor(43, 196, 174);
       pdf.text("Centro Con-sentido — anapaula@centroconsentido.com", pageW / 2, pageH - 5, { align: "center" });
       const nombreLimpio = (paciente?.nombre || "calendario").replace(/\s+/g, "");
       pdf.save(`${nombreLimpio}_${MESES[mes - 1]}${anio}.pdf`);
@@ -721,42 +722,45 @@ export default function CalendariosPage() {
       </div>
 
       {pacienteId && (
-        <div id="calendario-print" className="bg-white" style={{ fontFamily: "'Helvetica Neue', Arial, sans-serif", maxWidth: "100%", padding: "18px 22px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", paddingBottom: "12px", borderBottom: "2px solid #ede9e6", background: "linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%)", borderRadius: "12px", padding: "12px 16px" }}>
-            <div style={{ fontSize: "20px", fontWeight: 800, color: "#4c1d95", letterSpacing: "1px" }}>centro con-sentido</div>
-            <div style={{ textAlign: "right", fontSize: "9.5px", color: "#6d28d9", lineHeight: "1.8", fontWeight: 500 }}>
-              <div>anapaula@centroconsentido.com &nbsp;&nbsp; IG: @centro.consentido</div>
+        <div id="calendario-print" className="bg-white" style={{ fontFamily: "var(--font-nunito), 'Nunito', 'Helvetica Neue', Arial, sans-serif", maxWidth: "100%", padding: "22px 26px", color: "#4b4742" }}>
+          {/* Encabezado: logo + datos de contacto */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "14px", borderBottom: "3px solid #f0ede9" }}>
+            <BrandLogo size={76} />
+            <div style={{ textAlign: "right", fontSize: "9px", color: "#9a958d", lineHeight: "1.7", fontWeight: 600 }}>
+              <div style={{ color: "#0F7A6A", fontWeight: 700 }}>anapaula@centroconsentido.com</div>
+              <div>IG: @centro.consentido &nbsp;·&nbsp; WA: 81-2581-8016</div>
               <div>Rio Colorado 213 Ote, piso 2</div>
-              <div>Del Valle, SPGG, 66220.</div>
-              <div>WA: 81 - 2581 - 8016</div>
+              <div>Del Valle, SPGG, 66220</div>
             </div>
           </div>
 
-          <h2 style={{ textAlign: "center", fontSize: "17px", fontWeight: 800, color: "#4c1d95", marginBottom: "6px", letterSpacing: "1.5px", textTransform: "uppercase" }}>
-            Horario Mensual de Terapias
-          </h2>
-
-          <div style={{ textAlign: "center", marginBottom: "14px" }}>
-            <span style={{ display: "inline-block", background: "linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%)", color: "white", borderRadius: "50px", padding: "8px 48px", fontSize: "26px", fontWeight: 900, letterSpacing: "3px", boxShadow: "0 4px 15px rgba(109,40,217,0.35)" }}>
+          {/* Título + pastilla del mes */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "16px" }}>
+            <h2 style={{ textAlign: "center", fontSize: "14px", fontWeight: 700, color: "#8A8780", marginBottom: "8px", letterSpacing: "2px", textTransform: "uppercase" }}>
+              Horario Mensual de Terapias
+            </h2>
+            <span style={{ display: "inline-block", background: "linear-gradient(135deg, #2BC4AE 0%, #43BCEC 100%)", color: "white", borderRadius: "50px", padding: "9px 50px", fontSize: "24px", fontWeight: 800, letterSpacing: "2px", boxShadow: "0 4px 14px rgba(43,196,174,0.35)" }}>
               {mesLabel.toUpperCase()} {anio}
             </span>
           </div>
 
-          <div style={{ display: "flex", gap: "14px", marginBottom: "12px", alignItems: "stretch" }}>
-            <div style={{ flex: 1, fontSize: "12px", lineHeight: 2, background: "#f9f5ff", borderRadius: "10px", padding: "10px 14px", border: "1px solid #e9d5ff" }}>
-              <div><span style={{ fontWeight: 800, color: "#6d28d9" }}>Nombre:</span> <span style={{ fontWeight: 500, color: "#1c1917" }}>{paciente?.nombre}</span></div>
-              <div><span style={{ fontWeight: 800, color: "#6d28d9" }}>Tipo de Terapia:</span> <span style={{ fontWeight: 500, color: "#1c1917" }}>{paciente?.tipo_terapia || "Terapia Ocupacional"}</span></div>
+          {/* Datos del paciente + nota */}
+          <div style={{ display: "flex", gap: "14px", marginBottom: "14px", alignItems: "stretch" }}>
+            <div style={{ flex: 1, fontSize: "12px", lineHeight: 2, background: "#DCF6F1", borderRadius: "12px", padding: "12px 16px", border: "1.5px solid #A6E6DC" }}>
+              <div><span style={{ fontWeight: 800, color: "#0F7A6A" }}>Nombre:</span> <span style={{ fontWeight: 600, color: "#3a3a3a" }}>{paciente?.nombre}</span></div>
+              <div><span style={{ fontWeight: 800, color: "#0F7A6A" }}>Tipo de Terapia:</span> <span style={{ fontWeight: 600, color: "#3a3a3a" }}>{paciente?.tipo_terapia || "Terapia Ocupacional"}</span></div>
             </div>
-            <div style={{ flex: 1.2, border: "1.5px solid #fca5a5", borderRadius: "10px", padding: "10px 12px", fontSize: "8.5px", color: "#991b1b", fontWeight: 600, lineHeight: 1.5, background: "#fff5f5" }}>
-              NOTA: Se permite realizar una cancelación al mes, siempre y cuando se notifique con anticipación antes de la fecha establecida para tales avisos, a fin de procesar el descuento correspondiente. Pasada esta fecha límite, no se autorizarán descuentos. En caso de imposibilidad de asistencia, nos complace buscar la reposición de la sesión, sujeto a la disponibilidad de nuestra agenda. En caso de no lograr reprogramar la sesión, no se aplicará el descuento correspondiente. Les recordamos que la constancia en las sesiones terapéuticas es clave para asegurar el progreso del paciente.
+            <div style={{ flex: 1.2, border: "1.5px solid #F8C6D2", borderRadius: "12px", padding: "11px 14px", fontSize: "8.5px", color: "#B8284A", fontWeight: 600, lineHeight: 1.55, background: "#FDEAEF" }}>
+              <strong style={{ letterSpacing: "0.5px" }}>NOTA:</strong> Se permite realizar una cancelación al mes, siempre y cuando se notifique con anticipación antes de la fecha establecida para tales avisos, a fin de procesar el descuento correspondiente. Pasada esta fecha límite, no se autorizarán descuentos. En caso de imposibilidad de asistencia, nos complace buscar la reposición de la sesión, sujeto a la disponibilidad de nuestra agenda. En caso de no lograr reprogramar la sesión, no se aplicará el descuento correspondiente. Les recordamos que la constancia en las sesiones terapéuticas es clave para asegurar el progreso del paciente.
             </div>
           </div>
 
-          <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, marginBottom: "10px", fontSize: "10px", borderRadius: "10px", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", border: "1px solid #e4e0fb" }}>
+          {/* Calendario */}
+          <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, marginBottom: "12px", fontSize: "10px", borderRadius: "12px", overflow: "hidden", boxShadow: "0 2px 10px rgba(43,196,174,0.12)", border: "1.5px solid #DCF6F1" }}>
             <thead>
               <tr>
                 {["Lunes", "Martes", "Miérc.", "Jueves", "Viernes", "Sábado", "Domingo"].map((d) => (
-                  <th key={d} style={{ background: "linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%)", color: "white", fontWeight: 700, padding: "9px 2px", textAlign: "center", fontSize: "11px", letterSpacing: "0.5px", textTransform: "uppercase" }}>{d}</th>
+                  <th key={d} style={{ background: "linear-gradient(135deg, #2BC4AE 0%, #1aa491 100%)", color: "white", fontWeight: 700, padding: "10px 2px", textAlign: "center", fontSize: "11px", letterSpacing: "0.5px", textTransform: "uppercase" }}>{d}</th>
                 ))}
               </tr>
             </thead>
@@ -764,37 +768,37 @@ export default function CalendariosPage() {
               {celdas.map((semana, fi) => (
                 <tr key={fi}>
                   {semana.map((celda, ci) => (
-                    <td key={ci} style={{ border: "1px solid #ede9e6", height: "60px", verticalAlign: "top", padding: "4px 3px", background: celda.dia === null ? "#f5f3ff" : "white", width: "14.28%" }}>
+                    <td key={ci} style={{ border: "1px solid #eef0ee", height: "62px", verticalAlign: "top", padding: "5px 3px", background: celda.dia === null ? "#f8f7f4" : "white", width: "14.28%" }}>
                       {celda.dia !== null && (() => {
                         const repoData = reposicionesMap[celda.dia];
                         const esReposicion = !!repoData;
                         return (
                           <>
-                            <span style={{ color: "#7c3aed", fontSize: "10px", fontWeight: 700 }}>{celda.dia}</span>
+                            <span style={{ color: "#a6a299", fontSize: "10px", fontWeight: 800 }}>{celda.dia}</span>
                             {esReposicion && (
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "2px", gap: "2px" }}>
-                                <div style={{ background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)", color: "white", borderRadius: "6px", padding: "3px 4px", fontSize: "9px", fontWeight: 800, width: "100%", textAlign: "center", boxSizing: "border-box", boxShadow: "0 1px 3px rgba(22,163,74,0.4)" }}>
+                                <div style={{ background: "#5DC97B", color: "white", borderRadius: "7px", padding: "3px 4px", fontSize: "9px", fontWeight: 800, width: "100%", textAlign: "center", boxSizing: "border-box" }}>
                                   {repoData.hora}
                                 </div>
-                                <span style={{ fontSize: "7.5px", color: "white", fontWeight: 800, background: "#15803d", borderRadius: "4px", padding: "1px 5px", letterSpacing: "0.5px" }}>REP</span>
+                                <span style={{ fontSize: "7.5px", color: "white", fontWeight: 800, background: "#1E7C42", borderRadius: "5px", padding: "1px 6px", letterSpacing: "0.5px" }}>REP</span>
                                 {repoData.tipoRep === "Matutina" && (
-                                  <span style={{ fontSize: "7.5px", color: "white", fontWeight: 800, background: "#b45309", borderRadius: "4px", padding: "1px 5px", letterSpacing: "0.5px" }}>MAT</span>
+                                  <span style={{ fontSize: "7.5px", color: "white", fontWeight: 800, background: "#B5790E", borderRadius: "5px", padding: "1px 6px", letterSpacing: "0.5px" }}>MAT</span>
                                 )}
                               </div>
                             )}
                             {!esReposicion && celda.tipo === "sesion" && celda.diaSemana !== undefined && (
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "2px", gap: "2px" }}>
-                                <div style={{ background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)", color: "white", borderRadius: "6px", padding: "3px 4px", fontSize: "9px", fontWeight: 800, width: "100%", textAlign: "center", boxSizing: "border-box", boxShadow: "0 1px 3px rgba(124,58,237,0.4)" }}>
+                                <div style={{ background: "#2BC4AE", color: "white", borderRadius: "7px", padding: "3px 4px", fontSize: "9px", fontWeight: 800, width: "100%", textAlign: "center", boxSizing: "border-box" }}>
                                   {celda.hora}
                                 </div>
                                 {(tipoSesion[DIAS_KEY[celda.diaSemana]] ?? "Regular") === "Matutina" && (
-                                  <span style={{ fontSize: "7.5px", color: "white", fontWeight: 800, background: "#b45309", borderRadius: "4px", padding: "1px 5px", letterSpacing: "0.5px" }}>MAT</span>
+                                  <span style={{ fontSize: "7.5px", color: "white", fontWeight: 800, background: "#B5790E", borderRadius: "5px", padding: "1px 6px", letterSpacing: "0.5px" }}>MAT</span>
                                 )}
                               </div>
                             )}
                             {!esReposicion && celda.tipo === "excepcion" && (
-                              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginTop: "4px" }}>
-                                <div style={{ background: "linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)", borderRadius: "50%", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 3px rgba(220,38,38,0.4)" }}>
+                              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginTop: "5px" }}>
+                                <div style={{ background: "#F0567A", borderRadius: "50%", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                   <span style={{ color: "white", fontWeight: 900, fontSize: "15px", lineHeight: 1 }}>✕</span>
                                 </div>
                               </div>
@@ -809,40 +813,51 @@ export default function CalendariosPage() {
             </tbody>
           </table>
 
-          <div style={{ display: "flex", gap: "16px", marginBottom: "10px", fontSize: "9.5px", alignItems: "center", background: "#f9f5ff", borderRadius: "8px", padding: "7px 12px" }}>
+          {/* Leyenda */}
+          <div style={{ display: "flex", gap: "18px", marginBottom: "12px", fontSize: "9.5px", alignItems: "center", background: "#f8f7f4", borderRadius: "10px", padding: "8px 14px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <div style={{ width: "14px", height: "14px", borderRadius: "4px", background: "linear-gradient(135deg, #7c3aed, #6d28d9)" }}></div>
-              <span style={{ color: "#374151", fontWeight: 700 }}>Sesión regular</span>
+              <div style={{ width: "14px", height: "14px", borderRadius: "5px", background: "#2BC4AE" }}></div>
+              <span style={{ color: "#4b4742", fontWeight: 700 }}>Sesión regular</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <div style={{ width: "14px", height: "14px", borderRadius: "4px", background: "linear-gradient(135deg, #16a34a, #15803d)" }}></div>
-              <span style={{ color: "#374151", fontWeight: 700 }}>Reposición</span>
+              <div style={{ width: "14px", height: "14px", borderRadius: "5px", background: "#5DC97B" }}></div>
+              <span style={{ color: "#4b4742", fontWeight: 700 }}>Reposición</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <div style={{ width: "14px", height: "14px", borderRadius: "50%", background: "linear-gradient(135deg, #dc2626, #b91c1c)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: "14px", height: "14px", borderRadius: "5px", background: "#B5790E" }}></div>
+              <span style={{ color: "#4b4742", fontWeight: 700 }}>Matutina (MAT)</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <div style={{ width: "16px", height: "16px", borderRadius: "50%", background: "#F0567A", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <span style={{ color: "white", fontWeight: 900, fontSize: "9px", lineHeight: 1 }}>✕</span>
               </div>
-              <span style={{ color: "#374151", fontWeight: 700 }}>Día sin sesión</span>
+              <span style={{ color: "#4b4742", fontWeight: 700 }}>Día sin sesión</span>
             </div>
           </div>
 
-          <div style={{ fontSize: "10.5px", lineHeight: 1.8, background: "linear-gradient(135deg, #f9f5ff 0%, #faf5ff 100%)", borderRadius: "12px", padding: "12px 16px", border: "1px solid #e9d5ff" }}>
-            <div style={{ fontWeight: 800, color: "#4c1d95", borderBottom: "1px solid #e9d5ff", paddingBottom: "6px", marginBottom: "6px" }}>
-              Número de Sesiones: <span style={{ fontWeight: 400 }}>{totalSesiones} sesiones{reposicionesValidas.length > 0 ? ` + ${reposicionesValidas.length} reposición(es)` : ""} = {totalSesiones + reposicionesValidas.length} en total</span>
+          {/* Resumen */}
+          <div style={{ fontSize: "10.5px", lineHeight: 1.85, background: "#EFE6FB", borderRadius: "14px", padding: "13px 18px", border: "1.5px solid #D6BEF4" }}>
+            <div style={{ fontWeight: 800, color: "#6B36B8", borderBottom: "1.5px solid #D6BEF4", paddingBottom: "7px", marginBottom: "7px" }}>
+              Número de Sesiones: <span style={{ fontWeight: 600, color: "#4b4742" }}>{totalSesiones} sesiones{reposicionesValidas.length > 0 ? ` + ${reposicionesValidas.length} reposición(es)` : ""} = {totalSesiones + reposicionesValidas.length} en total</span>
             </div>
-            <div style={{ fontWeight: 600, color: "#1c1917" }}>
-              <span style={{ fontWeight: 800, color: "#6d28d9" }}>Monto Total del Mes:</span>{" "}
+            <div style={{ fontWeight: 600, color: "#3a3a3a" }}>
+              <span style={{ fontWeight: 800, color: "#6B36B8" }}>Monto Total del Mes:</span>{" "}
               Pago en Efectivo: {fmtMXN(montoEfectivo)} pesos &nbsp;|&nbsp; Pago en Tarjeta/transferencia/depósito + IVA: {fmtMXN(montoTransferencia)}
             </div>
-            <div style={{ fontSize: "9px", fontStyle: "italic", color: "#6b7280", marginTop: "6px", lineHeight: 1.6, borderTop: "1px solid #e9d5ff", paddingTop: "6px" }}>
+            <div style={{ fontSize: "9px", fontStyle: "italic", color: "#8A8780", marginTop: "7px", lineHeight: 1.6, borderTop: "1.5px solid #D6BEF4", paddingTop: "7px" }}>
               *El pago se debe cubrir antes del día <strong>{params.dia_tope_pago ?? 10}</strong> del mes.
               De lo contrario se aplicará un recargo del {((Number(params.recargo_pago_tarde ?? 0.10)) * 100).toFixed(0)}%.
             </div>
             {pagado && (
-              <div style={{ marginTop: "6px", fontWeight: 800, color: "#4c1d95" }}>
-                Pagado: <span style={{ background: "#d1fae5", color: "#065f46", padding: "2px 10px", borderRadius: "6px", fontWeight: 700, border: "1px solid #a7f3d0" }}>{pagado}</span>
+              <div style={{ marginTop: "7px", fontWeight: 800, color: "#6B36B8" }}>
+                Pagado: <span style={{ background: "#E2F6E8", color: "#1E7C42", padding: "2px 12px", borderRadius: "7px", fontWeight: 800, border: "1.5px solid #B2E6C2" }}>{pagado}</span>
               </div>
             )}
+          </div>
+
+          {/* Pie */}
+          <div style={{ textAlign: "center", marginTop: "14px", fontSize: "8.5px", fontWeight: 700, color: "#b8b3aa", letterSpacing: "0.5px" }}>
+            Centro Con-sentido · Terapia infantil con sentido
           </div>
         </div>
       )}

@@ -148,8 +148,8 @@ export default function DashboardPage() {
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(v: number) => fmtMXN(v)} />
               <Legend />
-              <Bar dataKey="ingresos" name="Ingresos" fill="#7c3aed" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="egresos" name="Egresos" fill="#f87171" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="ingresos" name="Ingresos" fill="#9B5DE5" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="egresos" name="Egresos" fill="#F0567A" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -162,7 +162,7 @@ export default function DashboardPage() {
               <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(v: number) => fmtMXN(v)} />
-              <Line dataKey="saldo" name="Saldo" stroke="#7c3aed" strokeWidth={2} dot={false} />
+              <Line dataKey="saldo" name="Saldo" stroke="#9B5DE5" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>

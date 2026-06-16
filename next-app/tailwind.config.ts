@@ -7,12 +7,38 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-nunito)", "ui-sans-serif", "system-ui", "sans-serif"],
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
       colors: {
+        // Remapeo: en toda la app "violet-*" pasa a ser el morado de marca Con-sentido
+        // (#9B5DE5). Esto reskinéa decenas de páginas sin tocar sus clases una por una.
+        violet: {
+          50: "#F5EEFC",
+          100: "#EBDDFA",
+          200: "#D9C0F4",
+          300: "#C29BEC",
+          400: "#AE7AE7",
+          500: "#9B5DE5",
+          600: "#8A45D8",
+          700: "#7330B8",
+          800: "#592591",
+          900: "#3F1A69",
+        },
+        // Colores de marca prefijados (no colisionan con los teal/sky/amber/green de Tailwind)
+        brand: {
+          coral: { soft: "#FDEAEF", DEFAULT: "#F0567A", dark: "#B8284A" },
+          amber: { soft: "#FEF2DC", DEFAULT: "#FBB034", dark: "#97650C" },
+          teal: { soft: "#DCF6F1", DEFAULT: "#2BC4AE", dark: "#0F7A6A" },
+          sky: { soft: "#E0F3FC", DEFAULT: "#43BCEC", dark: "#0F76A6" },
+          purple: { soft: "#EFE6FB", DEFAULT: "#9B5DE5", dark: "#6B36B8" },
+          green: { soft: "#E2F6E8", DEFAULT: "#5DC97B", dark: "#1E7C42" },
+        },
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: {
