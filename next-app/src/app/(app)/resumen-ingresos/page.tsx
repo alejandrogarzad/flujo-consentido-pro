@@ -222,7 +222,7 @@ export default function ResumenIngresosPage() {
             <thead className="bg-stone-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-stone-500 w-28">Mes</th>
-                {CATS.map((c) => <th key={c.key} className="px-3 py-3 text-right text-xs font-semibold text-stone-500">{c.label}</th>)}
+                {CATS.map((c) => <th key={c.key} className="px-3 py-3 text-center text-xs font-semibold text-stone-500">{c.label}</th>)}
                 <th className="px-4 py-3 text-right text-xs font-semibold text-stone-500">Total</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-stone-500">Notas</th>
               </tr>
@@ -240,14 +240,14 @@ export default function ResumenIngresosPage() {
                           value={(e as any)[c.key] ?? 0}
                           onFocus={(ev) => (ev.target as HTMLInputElement).select()}
                           onChange={(ev) => setEdit(m, c.key as keyof EditState, Number(ev.target.value) as any)}
-                          className="w-28 border border-stone-200 rounded-lg px-2 py-1.5 text-right text-sm focus:outline-none focus:ring-2 focus:ring-violet-200" />
+                          className="w-full border border-stone-200 rounded-lg px-2 py-1.5 text-center text-sm focus:outline-none focus:ring-2 focus:ring-violet-200" />
                       </td>
                     ))}
                     <td className="px-4 py-2.5 text-right font-bold text-violet-700">{fmtMXN(totalPorMes(m))}</td>
                     <td className="px-3 py-2">
                       <input value={e.notas || ""} onChange={(ev) => setEdit(m, "notas", ev.target.value)}
                         placeholder="—"
-                        className="w-36 border border-stone-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200" />
+                        className="w-full border border-stone-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200" />
                     </td>
                   </tr>
                 );
@@ -256,7 +256,7 @@ export default function ResumenIngresosPage() {
             <tfoot className="bg-stone-50 border-t-2 border-stone-200">
               <tr>
                 <td className="px-4 py-3 font-bold text-stone-700">Total</td>
-                {CATS.map((c) => <td key={c.key} className="px-3 py-3 text-right font-bold text-stone-700">{fmtMXN(totalCat(c.key))}</td>)}
+                {CATS.map((c) => <td key={c.key} className="px-3 py-3 text-center font-bold text-stone-700">{fmtMXN(totalCat(c.key))}</td>)}
                 <td className="px-4 py-3 text-right font-bold text-violet-700">{fmtMXN(totalAnual)}</td>
                 <td />
               </tr>

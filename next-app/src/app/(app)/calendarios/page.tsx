@@ -777,22 +777,22 @@ export default function CalendariosPage() {
                             <span style={{ color: "#a6a299", fontSize: "10px", fontWeight: 800 }}>{celda.dia}</span>
                             {esReposicion && (
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "2px", gap: "2px" }}>
-                                <div style={{ background: "#5DC97B", color: "white", borderRadius: "7px", padding: "3px 4px", fontSize: "9px", fontWeight: 800, width: "100%", textAlign: "center", boxSizing: "border-box" }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#5DC97B", color: "white", borderRadius: "7px", height: "17px", fontSize: "9px", fontWeight: 800, width: "100%", boxSizing: "border-box", lineHeight: 1 }}>
                                   {repoData.hora}
                                 </div>
-                                <span style={{ fontSize: "7.5px", color: "white", fontWeight: 800, background: "#1E7C42", borderRadius: "5px", padding: "1px 6px", letterSpacing: "0.5px" }}>REP</span>
+                                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "7.5px", color: "white", fontWeight: 800, background: "#1E7C42", borderRadius: "5px", padding: "2px 6px", letterSpacing: "0.5px", lineHeight: 1 }}>REP</span>
                                 {repoData.tipoRep === "Matutina" && (
-                                  <span style={{ fontSize: "7.5px", color: "white", fontWeight: 800, background: "#B5790E", borderRadius: "5px", padding: "1px 6px", letterSpacing: "0.5px" }}>MAT</span>
+                                  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "7.5px", color: "white", fontWeight: 800, background: "#B5790E", borderRadius: "5px", padding: "2px 6px", letterSpacing: "0.5px", lineHeight: 1 }}>MAT</span>
                                 )}
                               </div>
                             )}
                             {!esReposicion && celda.tipo === "sesion" && celda.diaSemana !== undefined && (
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "2px", gap: "2px" }}>
-                                <div style={{ background: "#2BC4AE", color: "white", borderRadius: "7px", padding: "3px 4px", fontSize: "9px", fontWeight: 800, width: "100%", textAlign: "center", boxSizing: "border-box" }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2BC4AE", color: "white", borderRadius: "7px", height: "17px", fontSize: "9px", fontWeight: 800, width: "100%", boxSizing: "border-box", lineHeight: 1 }}>
                                   {celda.hora}
                                 </div>
                                 {(tipoSesion[DIAS_KEY[celda.diaSemana]] ?? "Regular") === "Matutina" && (
-                                  <span style={{ fontSize: "7.5px", color: "white", fontWeight: 800, background: "#B5790E", borderRadius: "5px", padding: "1px 6px", letterSpacing: "0.5px" }}>MAT</span>
+                                  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "7.5px", color: "white", fontWeight: 800, background: "#B5790E", borderRadius: "5px", padding: "2px 6px", letterSpacing: "0.5px", lineHeight: 1 }}>MAT</span>
                                 )}
                               </div>
                             )}
