@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { Printer, Plus, Trash2, Save, CheckCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { db } from "@/lib/db";
@@ -15,6 +15,30 @@ import type {
 import { BrandLogo } from "@/components/ConsentidoLogo";
 
 const DIAS_KEY: DiaSemana[] = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
+
+// Chips del calendario impreso. html2canvas dibuja el texto más abajo que el navegador,
+// así que se usa table-cell + padding inferior para subirlo (verificado contra el raster).
+function PillHora({ bg, children }: { bg: string; children: ReactNode }) {
+  return (
+    <div style={{ display: "table", margin: "0 auto", background: bg, borderRadius: "9px", height: "22px" }}>
+      <span style={{ display: "table-cell", verticalAlign: "middle", textAlign: "center", padding: "0 10px 9px", color: "white", fontSize: "9px", fontWeight: 800, lineHeight: 1 }}>{children}</span>
+    </div>
+  );
+}
+function EtiquetaCal({ bg, children }: { bg: string; children: ReactNode }) {
+  return (
+    <div style={{ display: "table", margin: "3px auto 0", background: bg, borderRadius: "5px", height: "15px" }}>
+      <span style={{ display: "table-cell", verticalAlign: "middle", textAlign: "center", padding: "0 6px 6px", color: "white", fontSize: "7.5px", fontWeight: 800, lineHeight: 1, letterSpacing: "0.5px" }}>{children}</span>
+    </div>
+  );
+}
+function EquisDia() {
+  return (
+    <div style={{ display: "table", margin: "4px auto 0", width: "28px", height: "28px", background: "#F0567A", borderRadius: "50%" }}>
+      <span style={{ display: "table-cell", verticalAlign: "middle", textAlign: "center", paddingBottom: "9px", color: "white", fontWeight: 900, fontSize: "15px", lineHeight: 1 }}>✕</span>
+    </div>
+  );
+}
 
 const emptyHorario = (): HorarioSemanal => ({ lunes: "", martes: "", miercoles: "", jueves: "", viernes: "", sabado: "", domingo: "" });
 const emptyTipoSesion = (): TipoSesionSemanal => ({
@@ -778,33 +802,19 @@ export default function CalendariosPage() {
                           <>
                             <span style={{ color: "#a6a299", fontSize: "10px", fontWeight: 800 }}>{celda.dia}</span>
                             {esReposicion && (
-                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "2px", gap: "2px" }}>
-                                <div style={{ display: "block", background: "#5DC97B", color: "white", borderRadius: "7px", height: "16px", lineHeight: "16px", fontSize: "9px", fontWeight: 800, width: "100%", textAlign: "center", boxSizing: "border-box" }}>
-                                  {repoData.hora}
-                                </div>
-                                <span style={{ display: "inline-block", fontSize: "7.5px", color: "white", fontWeight: 800, background: "#1E7C42", borderRadius: "5px", padding: "1px 7px", lineHeight: "11px", letterSpacing: "0.5px" }}>REP</span>
-                                {repoData.tipoRep === "Matutina" && (
-                                  <span style={{ display: "inline-block", fontSize: "7.5px", color: "white", fontWeight: 800, background: "#B5790E", borderRadius: "5px", padding: "1px 7px", lineHeight: "11px", letterSpacing: "0.5px" }}>MAT</span>
-                                )}
+                              <div style={{ marginTop: "3px" }}>
+                                <PillHora bg="#5DC97B">{repoData.hora}</PillHora>
+                                <EtiquetaCal bg="#1E7C42">REP</EtiquetaCal>
+                                {repoData.tipoRep === "Matutina" && <EtiquetaCal bg="#B5790E">MAT</EtiquetaCal>}
                               </div>
                             )}
                             {!esReposicion && celda.tipo === "sesion" && celda.diaSemana !== undefined && (
-                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "2px", gap: "2px" }}>
-                                <div style={{ display: "block", background: "#2BC4AE", color: "white", borderRadius: "7px", height: "16px", lineHeight: "16px", fontSize: "9px", fontWeight: 800, width: "100%", textAlign: "center", boxSizing: "border-box" }}>
-                                  {celda.hora}
-                                </div>
-                                {(tipoSesion[DIAS_KEY[celda.diaSemana]] ?? "Regular") === "Matutina" && (
-                                  <span style={{ display: "inline-block", fontSize: "7.5px", color: "white", fontWeight: 800, background: "#B5790E", borderRadius: "5px", padding: "1px 7px", lineHeight: "11px", letterSpacing: "0.5px" }}>MAT</span>
-                                )}
+                              <div style={{ marginTop: "3px" }}>
+                                <PillHora bg="#2BC4AE">{celda.hora}</PillHora>
+                                {(tipoSesion[DIAS_KEY[celda.diaSemana]] ?? "Regular") === "Matutina" && <EtiquetaCal bg="#B5790E">MAT</EtiquetaCal>}
                               </div>
                             )}
-                            {!esReposicion && celda.tipo === "excepcion" && (
-                              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginTop: "5px" }}>
-                                <div style={{ background: "#F0567A", borderRadius: "50%", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                  <span style={{ color: "white", fontWeight: 900, fontSize: "15px", lineHeight: 1 }}>✕</span>
-                                </div>
-                              </div>
-                            )}
+                            {!esReposicion && celda.tipo === "excepcion" && <EquisDia />}
                           </>
                         );
                       })()}
