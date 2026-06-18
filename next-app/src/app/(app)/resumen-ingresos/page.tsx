@@ -58,8 +58,12 @@ export default function ResumenIngresosPage() {
         ter[p.mes - 1] += Number(p.monto_pagado || 0);
       });
 
+      // Evaluaciones = solo "Evaluación". Citas = TODO lo demás (incluye tipos
+      // nuevos como "Safe and Sound" o legacy como "Cita inicial / seguimiento").
+      // Si se filtrara por una lista cerrada, los tipos fuera de ella se caerían
+      // y el total dejaría de cuadrar con Flujo de Efectivo y Dashboard, que
+      // suman todos los eventos sin filtrar por tipo.
       const TIPOS_EVAL = ["Evaluación"];
-      const TIPOS_CITAS = ["Cita inicial / ingreso", "Cita seguimiento directora", "Cita escolar virtual", "Cita escolar presencial", "Observación escolar", "Reporte adicional"];
       const cit = Array(12).fill(0);
       const eva = Array(12).fill(0);
       eventos.forEach((ev) => {
@@ -69,7 +73,7 @@ export default function ResumenIngresosPage() {
         const d = new Date(fechaStr + "T12:00:00");
         if (isNaN(d.getTime()) || d.getFullYear() !== anio) return;
         if (TIPOS_EVAL.includes(ev.tipo)) eva[d.getMonth()] += Number(ev.monto_pagado || 0);
-        else if (TIPOS_CITAS.includes(ev.tipo)) cit[d.getMonth()] += Number(ev.monto_pagado || 0);
+        else cit[d.getMonth()] += Number(ev.monto_pagado || 0);
       });
 
       const sub = Array(12).fill(0);
