@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Search, Edit2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { db } from "@/lib/db";
-import { MESES } from "@/lib/calculos";
+import { MESES, generarCalendario, paramsToObject, precioPorSesion, type ParamMap } from "@/lib/calculos";
 import type { DiaSemana, Empleado, EstatusPaciente, HorarioSemanal, Paciente, TipoSesionSemanal } from "@/types/db";
 
 const ESTATUSES: EstatusPaciente[] = ["Activo", "Inactivo", "Pausado"];
@@ -47,9 +47,24 @@ const empty: FormState = {
   notas: "",
 };
 
+// ¿El horario guardado de un calendario difiere del horario de la ficha?
+// Compara hora, tipo y terapeuta día por día. La ficha es la fuente de verdad
+// para los meses futuros; las desviaciones puntuales van por excepciones, no
+// reescribiendo el horario semanal recurrente de un mes futuro.
+function calDifiereDeFicha(cal: { horario?: HorarioSemanal; tipo_sesion?: TipoSesionSemanal; terapeutas?: HorarioSemanal }, form: FormState): boolean {
+  const norm = (v: string | undefined) => (v ?? "").trim();
+  const tipo = (v: string | undefined) => norm(v) || "Regular";
+  return DIAS.some((d) =>
+    norm(cal.horario?.[d]) !== norm(form.dias_sesion[d]) ||
+    tipo(cal.tipo_sesion?.[d]) !== tipo(form.tipo_sesion[d]) ||
+    norm(cal.terapeutas?.[d]) !== norm(form.terapeutas[d]),
+  );
+}
+
 export default function PacientesPage() {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [params, setParams] = useState<ParamMap>({});
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -61,12 +76,14 @@ export default function PacientesPage() {
     try {
       // listAll() pagina internamente; con 200 de limit y el crecimiento del
       // padrón, esta lista podría truncarse pronto.
-      const [ps, emps] = await Promise.all([
+      const [ps, emps, params] = await Promise.all([
         db.paciente.listAll("-created_date"),
         db.empleado.filter({ estatus: "Activo" }, "nombre", 200),
+        db.parametro.listAll("clave"),
       ]);
       setPacientes(ps);
       setEmpleados(emps.filter((e) => e.puesto === "Terapeuta" || e.puesto === "Coordinadora"));
+      setParams(paramsToObject(params));
     } catch (err: any) {
       toast.error(err?.message || "Error al cargar pacientes");
     } finally {
@@ -121,12 +138,15 @@ export default function PacientesPage() {
         pacienteId = created.id;
       }
 
+      const hoy = new Date();
+      const mesHoy = hoy.getMonth() + 1;
+      const anioHoy = hoy.getFullYear();
+      const curVal = anioHoy * 100 + mesHoy;
+
+      const calsExistentes = await db.calendario_paciente.filter({ paciente_id: pacienteId });
+
       // Generar calendarios retroactivos desde mes_inicio hasta hoy
       if (form.mes_inicio && form.anio_inicio) {
-        const hoy = new Date();
-        const mesHoy = hoy.getMonth() + 1;
-        const anioHoy = hoy.getFullYear();
-        const calsExistentes = await db.calendario_paciente.filter({ paciente_id: pacienteId });
         const calsSet = new Set(calsExistentes.map((c) => `${c.anio}-${c.mes}`));
 
         const operaciones: Promise<unknown>[] = [];
@@ -172,7 +192,53 @@ export default function PacientesPage() {
         if (operaciones.length > 0) await Promise.all(operaciones);
       }
 
+      // Propagar cambio de horario a meses FUTUROS (a partir del siguiente mes).
+      // El mes en curso y los anteriores NO se tocan: son la foto del horario que
+      // realmente se aplicó. Solo se reescribe el horario semanal recurrente; se
+      // conservan excepciones (asuetos/ausencias), reposiciones y monto_override.
+      // Se recalcula total_sesiones porque Cobranza confía en ese valor guardado.
+      let futurasActualizadas = 0;
+      if (editing) {
+        const precioReg = precioPorSesion(form, params, "Regular");
+        const ivaRate = Number(params.iva ?? 0.16);
+        const futuras = calsExistentes.filter(
+          (c) => c.anio * 100 + c.mes > curVal && calDifiereDeFicha(c, form),
+        );
+        const ops = futuras.map((cal) => {
+          const asuetos = String(params[`asuetos_${cal.anio}_${cal.mes}`] ?? "");
+          const excTotales = [cal.excepciones || "", asuetos].filter(Boolean).join(",");
+          const { celdas, totalSesiones } = generarCalendario(cal.anio, cal.mes, form.dias_sesion, excTotales);
+          const reps = (cal.reposiciones || []).filter((r) => r.dia && r.hora);
+          let sesReg = 0;
+          let sesMat = 0;
+          celdas.flat().forEach((c) => {
+            if (c.tipo !== "sesion" || c.diaSemana === undefined) return;
+            if ((form.tipo_sesion[DIAS[c.diaSemana]] ?? "Regular") === "Matutina") sesMat++;
+            else sesReg++;
+          });
+          reps.forEach((r) => { if (r.tipoRep === "Matutina") sesMat++; else sesReg++; });
+          const totalSes = totalSesiones + reps.length;
+          const montoEfectivo = cal.monto_override != null ? Number(cal.monto_override) : totalSes * precioReg;
+          return db.calendario_paciente.update(cal.id, {
+            horario: form.dias_sesion,
+            tipo_sesion: form.tipo_sesion,
+            terapeutas: form.terapeutas,
+            total_sesiones: totalSes,
+            sesiones_regulares: sesReg,
+            sesiones_matutinas: sesMat,
+            reposiciones_count: reps.length,
+            monto_efectivo: montoEfectivo,
+            monto_transferencia: Math.round(montoEfectivo * (1 + ivaRate)),
+          });
+        });
+        if (ops.length > 0) await Promise.all(ops);
+        futurasActualizadas = ops.length;
+      }
+
       toast.success(editing ? "Paciente actualizado" : "Paciente creado");
+      if (futurasActualizadas > 0) {
+        toast.success(`Horario actualizado en ${futurasActualizadas} calendario(s) de meses futuros`);
+      }
       setShowForm(false);
       await load();
     } catch (err: any) {
