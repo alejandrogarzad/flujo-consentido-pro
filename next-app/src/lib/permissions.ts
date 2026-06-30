@@ -34,12 +34,6 @@ export function defaultPathFor(role: AppRole | null | undefined): string {
   return allowed[0] ?? "/dashboard";
 }
 
-// Para roles restringidos a un mes específico (cap_pagos solo puede capturar
-// pagos del mes corriente). Devuelve true si el rol está limitado a hoy.
-export function isLimitedToCurrentMonth(role: AppRole | null | undefined): boolean {
-  return role === "cap_pagos";
-}
-
 // Permisos finos por feature dentro de Cobranza / CitasEvaluaciones
 export function canEditSesiones(role: AppRole | null | undefined): boolean {
   return role !== "cap_pagos"; // cap_pagos solo captura monto/forma de pago

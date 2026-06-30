@@ -5,7 +5,7 @@ import { Plus, X, Edit2, Trash2, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { db, type AuthUser } from "@/lib/db";
 import {
-  isLimitedToCurrentMonth, canCreateEvento, canEditEvento, canDeleteEvento,
+  canCreateEvento, canEditEvento, canDeleteEvento,
 } from "@/lib/permissions";
 import { calcularTotalEvento, paramsToObject, fmtMXN, MESES, type ParamMap } from "@/lib/calculos";
 import type { Evento, FormaPago, Paciente, TipoEvento } from "@/types/db";
@@ -54,19 +54,9 @@ export default function CitasEvaluacionesPage() {
   const [pagoEvento, setPagoEvento] = useState<Evento | null>(null);
 
   // Permisos del rol actual
-  const restrictedMonth = isLimitedToCurrentMonth(user?.role);
   const canNew = canCreateEvento(user?.role);
   const canEdit = canEditEvento(user?.role);
   const canDel = canDeleteEvento(user?.role);
-
-  // Forzar mes/año actual si el rol está restringido
-  useEffect(() => {
-    if (restrictedMonth) {
-      const now = new Date();
-      setFiltroMes(now.getMonth() + 1);
-      setFiltroAnio(now.getFullYear());
-    }
-  }, [restrictedMonth]);
 
   const PRECIOS_DEFAULT: Record<TipoEvento, number> = {
     "Cita inicial / ingreso": Number(params.precio_cita_inicial ?? 1000),
@@ -207,8 +197,6 @@ export default function CitasEvaluacionesPage() {
           <select
             value={filtroMes}
             onChange={(e) => setFiltroMes(Number(e.target.value))}
-            disabled={restrictedMonth}
-            title={restrictedMonth ? "Solo puedes capturar el mes en curso" : undefined}
             className="border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200 disabled:bg-stone-100 disabled:text-stone-500 disabled:cursor-not-allowed"
           >
             {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
@@ -217,7 +205,6 @@ export default function CitasEvaluacionesPage() {
             type="number"
             value={filtroAnio}
             onChange={(e) => setFiltroAnio(Number(e.target.value))}
-            disabled={restrictedMonth}
             className="w-24 border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none disabled:bg-stone-100 disabled:text-stone-500 disabled:cursor-not-allowed"
           />
           {canNew && (

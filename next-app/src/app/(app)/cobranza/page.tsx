@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Calendar, Search, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { db, type AuthUser } from "@/lib/db";
-import { isLimitedToCurrentMonth, canEditSesiones, canDeletePago } from "@/lib/permissions";
+import { canEditSesiones, canDeletePago } from "@/lib/permissions";
 import { precioPorSesion } from "@/lib/calculos";
 import {
   generarCalendario, paramsToObject, fmtMXN, estatusCxC, MESES, pacienteAplicaEnMes,
@@ -145,7 +145,6 @@ export default function CobranzaPage() {
   const [edits, setEdits] = useState<Record<string, EditState>>({});
 
   // Permisos del rol actual
-  const restrictedMonth = isLimitedToCurrentMonth(currentUser?.role);
   const canEditSes = canEditSesiones(currentUser?.role);
   const canDel = canDeletePago(currentUser?.role);
 
@@ -154,15 +153,6 @@ export default function CobranzaPage() {
     db.parametro.list("clave").then((p) => setParams(paramsToObject(p)));
     db.auth.me().then(setCurrentUser);
   }, []);
-
-  // Forzar mes/año actual si el rol está restringido
-  useEffect(() => {
-    if (restrictedMonth) {
-      const now = new Date();
-      setFiltroMes(now.getMonth() + 1);
-      setFiltroAnio(now.getFullYear());
-    }
-  }, [restrictedMonth]);
 
   const cargarMes = useCallback(async () => {
     if (Object.keys(params).length === 0) return;
@@ -467,8 +457,6 @@ export default function CobranzaPage() {
           <select
             value={filtroMes}
             onChange={(e) => setFiltroMes(Number(e.target.value))}
-            disabled={restrictedMonth}
-            title={restrictedMonth ? "Solo puedes capturar el mes en curso" : undefined}
             className="border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200 disabled:bg-stone-100 disabled:text-stone-500 disabled:cursor-not-allowed"
           >
             {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
@@ -477,7 +465,6 @@ export default function CobranzaPage() {
             type="number"
             value={filtroAnio}
             onChange={(e) => setFiltroAnio(Number(e.target.value))}
-            disabled={restrictedMonth}
             className="w-24 border border-stone-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none disabled:bg-stone-100 disabled:text-stone-500 disabled:cursor-not-allowed"
           />
         </div>
